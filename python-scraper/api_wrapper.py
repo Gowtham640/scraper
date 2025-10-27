@@ -1402,16 +1402,19 @@ def api_get_all_data(email, password=None, force_refresh=False):
         session_valid = scraper.is_session_valid()
         print(f"[UNIFIED API] Session valid: {session_valid}", file=sys.stderr)
         
-        # SERVERLESS-FIRST LOGIN LOGIC: Always use password if provided (Vercel has no session persistence)
-        if password:
-            print("[UNIFIED API] Serverless environment - attempting login with provided password", file=sys.stderr)
+        # SMART SESSION LOGIC: Check session validity FIRST, then login if needed
+        if session_valid:
+            # Session exists and is valid → Skip login
+            print("[UNIFIED API] Valid session found - skipping login", file=sys.stderr)
+        elif password:
+            # No valid session → Login with password
+            print("[UNIFIED API] No valid session - attempting login with provided password", file=sys.stderr)
             if not scraper.login(email, password):
                 print("[UNIFIED API] Login failed!", file=sys.stderr)
                 return {"success": False, "error": "login_failed", "message": "Invalid credentials"}
             print("[UNIFIED API] Login successful!", file=sys.stderr)
-        elif session_valid:
-            print("[UNIFIED API] Valid session found - skipping login", file=sys.stderr)
         else:
+            # No valid session and no password provided
             print("[UNIFIED API] No valid session and no password provided", file=sys.stderr)
             return {
                 "success": False,
