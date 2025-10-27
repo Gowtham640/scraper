@@ -76,7 +76,10 @@ class SRMAcademiaScraperSelenium:
         
         # Setup Chrome options
         chrome_options = Options()
-        if headless:
+        # Use more stable headless mode for serverless
+        if self.is_serverless:
+            chrome_options.add_argument("--headless=new")  # More stable in serverless
+        elif headless:
             chrome_options.add_argument("--headless")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_argument("--no-sandbox")
@@ -214,36 +217,38 @@ class SRMAcademiaScraperSelenium:
             self.driver.get("https://academia.srmist.edu.in/")
             time.sleep(1)  # Reduced from 3s to 1s
             
-            print(f"[OK] Page loaded: {self.driver.title}", file=sys.stderr)
-            
-            # Switch to the iframe - try multiple selectors as fallback
-            print("[STEP 2] Switching to login iframe...", file=sys.stderr)
-            iframe = None
-            
-            # Try multiple iframe selectors with retries
-            selectors = [
-                (By.ID, "signinFrame"),
-                (By.NAME, "signinFrame"),
-                (By.TAG_NAME, "iframe"),
-            ]
-            
-            for selector in selectors:
-                try:
-                    iframe = self.wait.until(
-                        EC.presence_of_element_located(selector)
-                    )
-                    print(f"[OK] Found iframe with selector: {selector}", file=sys.stderr)
-                    break
-                except TimeoutException:
-                    print(f"[RETRY] Trying alternative iframe selector: {selector}", file=sys.stderr)
-                    continue
-            
-            if not iframe:
-                print("[ERROR] Could not find login iframe with any selector", file=sys.stderr)
+            # Verify window is still open after page load
+            try:
+                _ = self.driver.current_url
+                print(f"[OK] Page loaded: {self.driver.title}", file=sys.stderr)
+            except Exception as e:
+                print(f"[ERROR] Browser window closed unexpectedly: {e}", file=sys.stderr)
                 return False
             
-            self.driver.switch_to.frame(iframe)
-            print("[OK] Switched to iframe", file=sys.stderr)
+            # Switch to the iframe - simplified approach for stability
+            print("[STEP 2] Switching to login iframe...", file=sys.stderr)
+            
+            try:
+                # Verify window is still open before finding iframe
+                _ = self.driver.current_url
+                
+                # Find iframe using ID (simplest and most reliable)
+                try:
+                    iframe = self.wait.until(
+                        EC.presence_of_element_located((By.ID, "signinFrame"))
+                    )
+                    self.driver.switch_to.frame(iframe)
+                    print("[OK] Switched to iframe", file=sys.stderr)
+                except TimeoutException:
+                    # Fallback to any iframe
+                    print("[RETRY] Trying alternative iframe selector...", file=sys.stderr)
+                    iframe = self.driver.find_element(By.TAG_NAME, "iframe")
+                    self.driver.switch_to.frame(iframe)
+                    print("[OK] Switched to iframe (fallback)", file=sys.stderr)
+                    
+            except Exception as e:
+                print(f"[ERROR] Could not find or switch to iframe: {e}", file=sys.stderr)
+                return False
             
             # Find and fill email field
             print("[STEP 3] Entering email...", file=sys.stderr)
