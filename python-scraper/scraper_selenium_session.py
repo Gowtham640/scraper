@@ -8,6 +8,7 @@ import os
 import sys
 import json
 import time
+import uuid
 import hashlib
 from datetime import datetime, timedelta
 from selenium import webdriver
@@ -16,6 +17,18 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
+
+
+def is_serverless_env():
+    """Detect if running in serverless environment"""
+    # Check for serverless indicators
+    return (
+        os.environ.get('RENDER') is not None or  # Render.com
+        os.environ.get('VERCEL') is not None or  # Vercel
+        os.environ.get('LAMBDA_TASK_ROOT') is not None or  # AWS Lambda
+        os.environ.get('DYNO') is not None  # Heroku
+    )
+
 
 class SRMAcademiaScraperSelenium:
     def __init__(self, headless=False, use_session=True, user_email=None):
@@ -28,21 +41,36 @@ class SRMAcademiaScraperSelenium:
             user_email: User email for per-user session management (required if use_session=True)
         """
         self.headless = headless
-        self.use_session = use_session
         self.user_email = user_email
         self.session_timeout = 30 * 24 * 60 * 60  # 30 days in seconds
+        
+        # Detect serverless environment
+        self.is_serverless = is_serverless_env()
+        
+        if self.is_serverless:
+            # In serverless, disable session persistence (it causes conflicts)
+            use_session = False
+            print("[SERVERLESS] Detected serverless environment - disabling session persistence", file=sys.stderr)
+        
+        self.use_session = use_session
         
         # Create per-user session files if user_email is provided
         if use_session and user_email:
             # Create a safe filename from email using hash
             email_hash = hashlib.md5(user_email.encode()).hexdigest()[:16]
-            self.user_session_id = f"{user_email.split('@')[0]}_{email_hash}"
+            
+            # Add unique request ID to avoid conflicts in serverless
+            request_id = str(uuid.uuid4())[:8]  # Short UUID for uniqueness
+            self.request_id = request_id  # Save for cleanup later
+            
+            self.user_session_id = f"{user_email.split('@')[0]}_{email_hash}_{request_id}"
             self.session_file = f"session_data_{self.user_session_id}.json"
-            print(f"[SESSION] Using per-user session for: {user_email}", file=sys.stderr)
+            print(f"[SESSION] Using unique session for: {user_email} (ID: {request_id})", file=sys.stderr)
         else:
             # Fallback to global session (backward compatibility)
             self.user_session_id = "global"
             self.session_file = "session_data.json"
+            self.request_id = None
             if use_session:
                 print("[SESSION] Warning: No user_email provided, using global session", file=sys.stderr)
         
@@ -88,7 +116,8 @@ class SRMAcademiaScraperSelenium:
         if use_session:
             # Create a per-user persistent Chrome profile directory
             if user_email:
-                profile_dir = os.path.join(os.getcwd(), "chrome_sessions", self.user_session_id)
+                # Add timestamp to ensure uniqueness per request
+                profile_dir = os.path.join(os.getcwd(), "chrome_sessions", f"{self.user_session_id}_{int(time.time())}")
             else:
                 # Fallback to global profile
                 profile_dir = os.path.join(os.getcwd(), "chrome_session_profile")
@@ -98,7 +127,10 @@ class SRMAcademiaScraperSelenium:
                 print(f"[SESSION] Created profile directory: {profile_dir}", file=sys.stderr)
             
             chrome_options.add_argument(f"--user-data-dir={profile_dir}")
+            self.profile_dir = profile_dir  # Save for cleanup
             print(f"[SESSION] Using Chrome profile: {profile_dir}", file=sys.stderr)
+        else:
+            self.profile_dir = None
         
         try:
             self.driver = webdriver.Chrome(options=chrome_options)
@@ -184,17 +216,34 @@ class SRMAcademiaScraperSelenium:
             
             print(f"[OK] Page loaded: {self.driver.title}", file=sys.stderr)
             
-            # Switch to the iframe
+            # Switch to the iframe - try multiple selectors as fallback
             print("[STEP 2] Switching to login iframe...", file=sys.stderr)
-            try:
-                iframe = self.wait.until(
-                    EC.presence_of_element_located((By.ID, "signinFrame"))
-                )
-                self.driver.switch_to.frame(iframe)
-                print("[OK] Switched to iframe", file=sys.stderr)
-            except TimeoutException:
-                print("[ERROR] Could not find login iframe", file=sys.stderr)
+            iframe = None
+            
+            # Try multiple iframe selectors with retries
+            selectors = [
+                (By.ID, "signinFrame"),
+                (By.NAME, "signinFrame"),
+                (By.TAG_NAME, "iframe"),
+            ]
+            
+            for selector in selectors:
+                try:
+                    iframe = self.wait.until(
+                        EC.presence_of_element_located(selector)
+                    )
+                    print(f"[OK] Found iframe with selector: {selector}", file=sys.stderr)
+                    break
+                except TimeoutException:
+                    print(f"[RETRY] Trying alternative iframe selector: {selector}", file=sys.stderr)
+                    continue
+            
+            if not iframe:
+                print("[ERROR] Could not find login iframe with any selector", file=sys.stderr)
                 return False
+            
+            self.driver.switch_to.frame(iframe)
+            print("[OK] Switched to iframe", file=sys.stderr)
             
             # Find and fill email field
             print("[STEP 3] Entering email...", file=sys.stderr)
@@ -326,12 +375,48 @@ class SRMAcademiaScraperSelenium:
             traceback.print_exc()
             return None
     
+    def cleanup_profile(self):
+        """Safely cleanup Chrome profile directory and processes"""
+        try:
+            # Kill any orphaned Chrome processes for this profile
+            if hasattr(self, 'profile_dir') and self.profile_dir:
+                import subprocess
+                import shutil
+                import platform
+                
+                # Kill Chrome processes on Windows
+                if platform.system() == "Windows":
+                    try:
+                        subprocess.run(
+                            ["taskkill", "/F", "/IM", "chrome.exe", "/T"],
+                            check=False,
+                            capture_output=True,
+                            timeout=5
+                        )
+                    except Exception:
+                        pass
+                
+                # Cleanup directory
+                if os.path.exists(self.profile_dir):
+                    try:
+                        # Wait a bit for Chrome to release file locks
+                        time.sleep(1)
+                        shutil.rmtree(self.profile_dir, ignore_errors=True)
+                        print(f"[CLEANUP] Removed profile directory: {self.profile_dir}", file=sys.stderr)
+                    except Exception as e:
+                        print(f"[CLEANUP] Could not remove profile: {e}", file=sys.stderr)
+        except Exception as e:
+            print(f"[CLEANUP] Error in cleanup: {e}", file=sys.stderr)
+    
     def close(self):
-        """Close the browser"""
+        """Close the browser and cleanup"""
         try:
             if hasattr(self, 'driver'):
                 self.driver.quit()
                 print("[OK] Browser closed", file=sys.stderr)
+            
+            # Cleanup profile directory
+            self.cleanup_profile()
         except Exception as e:
             print(f"[ERROR] Error closing browser: {e}", file=sys.stderr)
 
