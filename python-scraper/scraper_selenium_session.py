@@ -16,7 +16,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
 
 
 def is_serverless_env():
@@ -230,7 +230,11 @@ class SRMAcademiaScraperSelenium:
             
             try:
                 # Verify window is still open before finding iframe
-                _ = self.driver.current_url
+                try:
+                    _ = self.driver.current_url
+                except WebDriverException as e:
+                    print(f"[ERROR] Browser window detached before iframe detection: {e}", file=sys.stderr)
+                    return False
                 
                 # Find iframe using ID (simplest and most reliable)
                 try:
@@ -242,10 +246,27 @@ class SRMAcademiaScraperSelenium:
                 except TimeoutException:
                     # Fallback to any iframe
                     print("[RETRY] Trying alternative iframe selector...", file=sys.stderr)
-                    iframe = self.driver.find_element(By.TAG_NAME, "iframe")
-                    self.driver.switch_to.frame(iframe)
-                    print("[OK] Switched to iframe (fallback)", file=sys.stderr)
+                    try:
+                        iframe = self.driver.find_element(By.TAG_NAME, "iframe")
+                        self.driver.switch_to.frame(iframe)
+                        print("[OK] Switched to iframe (fallback)", file=sys.stderr)
+                    except WebDriverException as e:
+                        print(f"[ERROR] Browser crashed in fallback: {e}", file=sys.stderr)
+                        return False
+                except WebDriverException as e:
+                    # Check if browser crashed
+                    if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
+                        print("[ERROR] Browser window closed/crashed during iframe detection", file=sys.stderr)
+                        return False
+                    raise  # Re-raise other WebDriverExceptions
                     
+            except WebDriverException as e:
+                # Handle browser crash errors
+                if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
+                    print("[ERROR] Browser crashed or was closed unexpectedly", file=sys.stderr)
+                    return False
+                print(f"[ERROR] WebDriver error: {e}", file=sys.stderr)
+                return False
             except Exception as e:
                 print(f"[ERROR] Could not find or switch to iframe: {e}", file=sys.stderr)
                 return False
@@ -259,9 +280,15 @@ class SRMAcademiaScraperSelenium:
                 email_field.clear()
                 email_field.send_keys(email)
                 print(f"[OK] Email entered: {email}", file=sys.stderr)
-            except TimeoutException:
+            except (TimeoutException, WebDriverException) as e:
+                if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
+                    print("[ERROR] Browser crashed during email entry", file=sys.stderr)
+                    return False
                 print("[ERROR] Could not find email field", file=sys.stderr)
-                self.driver.switch_to.default_content()
+                try:
+                    self.driver.switch_to.default_content()
+                except:
+                    pass
                 return False
             
             # Click Next button to reveal password field
@@ -271,9 +298,15 @@ class SRMAcademiaScraperSelenium:
                 next_button.click()
                 print("[OK] Next button clicked", file=sys.stderr)
                 time.sleep(2)  # Wait for password field to appear
-            except NoSuchElementException:
+            except (NoSuchElementException, WebDriverException) as e:
+                if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
+                    print("[ERROR] Browser crashed during next button click", file=sys.stderr)
+                    return False
                 print("[ERROR] Could not find Next button", file=sys.stderr)
-                self.driver.switch_to.default_content()
+                try:
+                    self.driver.switch_to.default_content()
+                except:
+                    pass
                 return False
             
             # Find and fill password field
@@ -285,9 +318,15 @@ class SRMAcademiaScraperSelenium:
                 password_field.clear()
                 password_field.send_keys(password)
                 print("[OK] Password entered", file=sys.stderr)
-            except TimeoutException:
+            except (TimeoutException, WebDriverException) as e:
+                if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
+                    print("[ERROR] Browser crashed during password entry", file=sys.stderr)
+                    return False
                 print("[ERROR] Could not find password field", file=sys.stderr)
-                self.driver.switch_to.default_content()
+                try:
+                    self.driver.switch_to.default_content()
+                except:
+                    pass
                 return False
             
             # Click login button (same as next button)
@@ -298,9 +337,15 @@ class SRMAcademiaScraperSelenium:
                 )
                 login_button.click()
                 print("[OK] Login button clicked", file=sys.stderr)
-            except TimeoutException:
+            except (TimeoutException, WebDriverException) as e:
+                if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
+                    print("[ERROR] Browser crashed during login button click", file=sys.stderr)
+                    return False
                 print("[ERROR] Could not find login button", file=sys.stderr)
-                self.driver.switch_to.default_content()
+                try:
+                    self.driver.switch_to.default_content()
+                except:
+                    pass
                 return False
             
             # Wait for login to complete
@@ -325,7 +370,10 @@ class SRMAcademiaScraperSelenium:
                 
                 return True
                 
-            except TimeoutException:
+            except (TimeoutException, WebDriverException) as e:
+                if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
+                    print("[ERROR] Browser crashed while waiting for dashboard", file=sys.stderr)
+                    return False
                 print("[ERROR] Login failed - timeout waiting for dashboard", file=sys.stderr)
                 return False
                 
