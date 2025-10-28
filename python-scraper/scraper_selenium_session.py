@@ -168,7 +168,7 @@ class SRMAcademiaScraperSelenium:
             try:
                 print("[SESSION] Testing session validity...", file=sys.stderr)
                 self.driver.get("https://academia.srmist.edu.in/#Page:Dashboard")
-                time.sleep(3)
+                time.sleep(1)  # Optimized - reduced from 3s to 1s
                 
                 # Check if we're redirected to login page
                 if "Login" in self.driver.title or "signinFrame" in self.driver.page_source:
@@ -255,7 +255,7 @@ class SRMAcademiaScraperSelenium:
             
             print(f"[STEP 1] Loading portal page...", file=sys.stderr)
             self.driver.get("https://academia.srmist.edu.in/")
-            time.sleep(1)  # Reduced from 3s to 1s
+            time.sleep(0.5)  # Optimized for speed
             
             # Verify window is still open after page load
             try:
@@ -337,7 +337,7 @@ class SRMAcademiaScraperSelenium:
                 next_button = self.driver.find_element(By.ID, "nextbtn")
                 next_button.click()
                 print("[OK] Next button clicked", file=sys.stderr)
-                time.sleep(2)  # Wait for password field to appear
+                time.sleep(0.5)  # Optimized wait - explicit wait below will handle rest
             except (NoSuchElementException, WebDriverException) as e:
                 if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
                     print("[ERROR] Browser crashed during next button click", file=sys.stderr)
@@ -390,7 +390,7 @@ class SRMAcademiaScraperSelenium:
             
             # Wait for login to complete
             print("[STEP 7] Waiting for login to complete...", file=sys.stderr)
-            time.sleep(2)  # Reduced from 5s to 2s
+            time.sleep(0.5)  # Optimized - WebDriverWait below handles rest
             
             # Switch back to default content
             self.driver.switch_to.default_content()
@@ -433,7 +433,7 @@ class SRMAcademiaScraperSelenium:
             print(f"[STEP 1] Navigating to: {planner_url}", file=sys.stderr)
             
             self.driver.get(planner_url)
-            time.sleep(10)  # Wait for page to load completely
+            time.sleep(3)  # Optimized - reduced from 10s to 3s
             
             print(f"[OK] Calendar page loaded: {self.driver.title}", file=sys.stderr)
             
@@ -493,7 +493,7 @@ class SRMAcademiaScraperSelenium:
                 if os.path.exists(self.profile_dir):
                     try:
                         # Wait a bit for Chrome to release file locks
-                        time.sleep(1)
+                        time.sleep(0.3)  # Optimized - reduced from 1s to 0.3s
                         shutil.rmtree(self.profile_dir, ignore_errors=True)
                         print(f"[CLEANUP] Removed profile directory: {self.profile_dir}", file=sys.stderr)
                     except Exception as e:

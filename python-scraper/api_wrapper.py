@@ -569,7 +569,7 @@ def get_marks_page_html(scraper):
         print(f"[MARKS] Navigating to: {attendance_url}", file=sys.stderr)
         
         scraper.driver.get(attendance_url)
-        time.sleep(2)  # Wait for page to load
+        time.sleep(0.5)  # Optimized - reduced from 2s to 0.5s
         
         print(f"[MARKS] Current URL: {scraper.driver.current_url}", file=sys.stderr)
         print(f"[MARKS] Page title: {scraper.driver.title}", file=sys.stderr)

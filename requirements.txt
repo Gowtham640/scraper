@@ -3,4 +3,6 @@ flask-cors==4.0.0
 selenium==4.15.0
 beautifulsoup4==4.12.2
 chromedriver-binary==119.0.6045.105.0
+APScheduler==3.10.4
+requests==2.31.0
 
