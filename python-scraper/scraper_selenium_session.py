@@ -221,12 +221,22 @@ class SRMAcademiaScraperSelenium:
                 print(f"[BROWSER STATE] Already logged in - on internal page: {current_url}", file=sys.stderr)
                 return True
             
-            # Check if we're on the main login page
-            if "academia.srmist.edu.in" in current_url and "#Page:" not in current_url:
-                # Could be login page - check for login iframe
-                if "Login" in title:
-                    print("[BROWSER STATE] On login page - not logged in", file=sys.stderr)
-                    return False
+            # Check if title explicitly says Login
+            if "Login" in title:
+                print("[BROWSER STATE] On login page - title contains 'Login'", file=sys.stderr)
+                return False
+            
+            # If on base academia URL without "Login" in title, check for login iframe
+            if "academia.srmist.edu.in" in current_url:
+                try:
+                    # Try to find login iframe - if it exists, we're on login page
+                    self.driver.find_element(By.ID, "signinFrame")
+                    print("[BROWSER STATE] Found login iframe - on login page", file=sys.stderr)
+                    return False  # Found iframe = login page
+                except:
+                    # No login iframe found = already logged in
+                    print("[BROWSER STATE] No login iframe found - already logged in", file=sys.stderr)
+                    return True
             
             print(f"[BROWSER STATE] Unknown state - URL: {current_url}, Title: {title}", file=sys.stderr)
             return False
