@@ -1094,19 +1094,23 @@ def get_calendar_data_with_scraper(scraper, email, password, force_refresh=False
         print("[UNIFIED API] Cache expired or empty - fetching fresh calendar data", file=sys.stderr)
 
         html_content = None
-        # Try to get data with existing session first
-        if scraper.is_session_valid():
-            print("[UNIFIED API] Valid session found - trying to get calendar data without login", file=sys.stderr)
+        # Check if browser is already logged in (real-time state check)
+        if scraper.is_logged_in():
+            print("[UNIFIED API] Browser already logged in - fetching calendar data directly", file=sys.stderr)
             html_content = scraper.get_calendar_data()
-
-        # If session was invalid or data fetch failed, attempt login
-        if html_content is None:
-            print("[UNIFIED API] Session invalid or expired - attempting login for calendar", file=sys.stderr)
+        else:
+            # Browser not logged in - need to login first
+            print("[UNIFIED API] Browser not logged in - attempting login for calendar", file=sys.stderr)
             if not scraper.login(email, password):
                 print("[UNIFIED API] Login failed for calendar!", file=sys.stderr)
                 return {"success": False, "error": "Login failed"}
             print("[UNIFIED API] Login successful for calendar!", file=sys.stderr)
             html_content = scraper.get_calendar_data()
+        
+        # If data fetch failed after login, return error
+        if html_content is None:
+            print("[UNIFIED API] Failed to get calendar HTML content after login", file=sys.stderr)
+            return {"success": False, "error": "Failed to get calendar data after login"}
 
         if not html_content:
             print("[UNIFIED API] Failed to get calendar HTML content after all attempts", file=sys.stderr)
@@ -1164,13 +1168,14 @@ def get_attendance_and_marks_data_with_scraper(scraper, email, password):
         
         # Use the EXACT same logic as individual functions - fetch page once, extract both
         html_content = None
-        if scraper.is_session_valid():
-            print("[UNIFIED API] Valid session found - trying to get data without login", file=sys.stderr)
+        # Check if browser is already logged in (real-time state check)
+        if scraper.is_logged_in():
+            print("[UNIFIED API] Browser already logged in - fetching attendance/marks data directly", file=sys.stderr)
             # Use get_marks_page_html for proper validation (same as individual function)
             html_content = get_marks_page_html(scraper)
-        
-        if html_content is None:
-            print("[UNIFIED API] Session invalid or expired - attempting login", file=sys.stderr)
+        else:
+            # Browser not logged in - need to login first
+            print("[UNIFIED API] Browser not logged in - attempting login for attendance/marks", file=sys.stderr)
             if not scraper.login(email, password):
                 print("[UNIFIED API] Login failed!", file=sys.stderr)
                 return {
@@ -1291,19 +1296,23 @@ def get_timetable_data_with_scraper(scraper, email, password):
         print(f"[UNIFIED API] Getting timetable data for: {email}", file=sys.stderr)
         
         html_content = None
-        # Try to get data with existing session first
-        if scraper.is_session_valid():
-            print("[UNIFIED API] Valid session found - trying to get timetable data without login", file=sys.stderr)
+        # Check if browser is already logged in (real-time state check)
+        if scraper.is_logged_in():
+            print("[UNIFIED API] Browser already logged in - fetching timetable data directly", file=sys.stderr)
             html_content = get_timetable_page_html(scraper)
-        
-        # If session was invalid or data fetch failed, attempt login
-        if html_content is None:
-            print("[UNIFIED API] Session invalid or expired - attempting login for timetable", file=sys.stderr)
+        else:
+            # Browser not logged in - need to login first
+            print("[UNIFIED API] Browser not logged in - attempting login for timetable", file=sys.stderr)
             if not scraper.login(email, password):
                 print("[UNIFIED API] Login failed for timetable!", file=sys.stderr)
                 return {"success": False, "error": "Login failed"}
             print("[UNIFIED API] Login successful for timetable!", file=sys.stderr)
             html_content = get_timetable_page_html(scraper)
+        
+        # If data fetch failed after login, return error
+        if html_content is None:
+            print("[UNIFIED API] Failed to get timetable HTML content after login", file=sys.stderr)
+            return {"success": False, "error": "Failed to get timetable data after login"}
 
         if not html_content:
             print("[UNIFIED API] Failed to get timetable HTML content after all attempts", file=sys.stderr)

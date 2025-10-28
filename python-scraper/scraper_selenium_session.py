@@ -205,6 +205,36 @@ class SRMAcademiaScraperSelenium:
         except Exception as e:
             print(f"[SESSION] Error saving session: {e}", file=sys.stderr)
     
+    def is_logged_in(self):
+        """Check if browser is currently on a logged-in page (real-time state check)"""
+        try:
+            current_url = self.driver.current_url
+            title = self.driver.title
+            
+            # Check if we're on dashboard/welcome or any internal page
+            if "WELCOME" in title or "Dashboard" in title:
+                print("[BROWSER STATE] Already logged in - on WELCOME/Dashboard page", file=sys.stderr)
+                return True
+            
+            # Check if URL shows we're inside the portal (any internal page)
+            if "academia.srmist.edu.in/#Page:" in current_url:
+                print(f"[BROWSER STATE] Already logged in - on internal page: {current_url}", file=sys.stderr)
+                return True
+            
+            # Check if we're on the main login page
+            if "academia.srmist.edu.in" in current_url and "#Page:" not in current_url:
+                # Could be login page - check for login iframe
+                if "Login" in title:
+                    print("[BROWSER STATE] On login page - not logged in", file=sys.stderr)
+                    return False
+            
+            print(f"[BROWSER STATE] Unknown state - URL: {current_url}, Title: {title}", file=sys.stderr)
+            return False
+            
+        except Exception as e:
+            print(f"[BROWSER STATE] Error checking login state: {e}", file=sys.stderr)
+            return False
+    
     def login(self, email, password):
         """Login to the academia portal using Selenium with session management"""
         try:
