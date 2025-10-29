@@ -418,52 +418,86 @@ class SRMAcademiaScraperSelenium:
                     pass
                 return False
             
-            # Wait for login to process and switch back to default content
-            print("[STEP 7] Waiting for login to process...", file=sys.stderr)
-            time.sleep(1)  # Brief wait for login to process
-            self.driver.switch_to.default_content()
+            # ✅ HYBRID METHOD: Wait for login to complete (smart wait - returns as soon as done)
+            print("[STEP 7] Waiting for login to complete (smart wait)...", file=sys.stderr)
             
-            # ✅ CRITICAL: Verify login by explicitly navigating to Dashboard
-            # This ensures we're actually logged in, not just checking current page state
-            print("[STEP 7.1] Verifying login by navigating to Dashboard...", file=sys.stderr)
             try:
-                # Explicitly navigate to Dashboard to verify weоприя access protected pages
-                dashboard_url = "https://academia.srmist.edu.in/#Page:Dashboard"
-                print(f"[DEBUG] Navigating to Dashboard: {dashboard_url}", file=sys.stderr)
-                self.driver.get(dashboard_url)
+                # STRATEGY 1: Wait for iframe to become stale/closed = login processed
+                # This is faster than fixed sleep and more reliable
                 
-                # Wait for page to load
-                time.sleep(2)  # Wait for navigation and page load
+                def login_iframe_disappeared(driver):
+                    """Check if login iframe has disappeared (login processed)"""
+                    try:
+                        driver.switch_to.default_content()  # Switch to main frame
+                        # Try to find iframe - if it's gone, login processed
+                        iframe_elements = driver.find_elements(By.ID, "signinFrame")
+                        if len(iframe_elements) == 0:
+                            return True  # Iframe gone = login completed
+                        return False
+                    except Exception:
+                        # Iframe detached/stale = login processed
+                        return True
                 
-                # Check current state
-                final_url = self.driver.current_url
-                final_title = self.driver.title
-                page_source_check = self.driver.page_source[:1000] if len(self.driver.page_source) > 0 else ""
+                # Wait up to 10 seconds for login to complete (typically 1-3 seconds)
+                try:
+                    WebDriverWait(self.driver, 10).until(login_iframe_disappeared)
+                    print("[OK] Login iframe disappeared - login processing complete", file=sys.stderr)
+                except TimeoutException:
+                    # Backup: Check if we're still in iframe after timeout
+                    try:
+                        self.driver.switch_to.default_content()
+                        # Give it one more chance - check page state
+                        time.sleep(0.5)
+                    except:
+                        pass
+                    print("[WARN] Iframe check timeout - proceeding with verification", file=sys.stderr)
                 
-                print(f"[LOGIN VERIFY] After Dashboard navigation - URL: {final_url}", file=sys.stderr)
-                print(f"[LOGIN VERIFY] After Dashboard navigation - Title: {final_title}", file=sys.stderr)
-                print(f"[LOGIN VERIFY] Contains 'Login' in title: {'Login' in final_title}", file=sys.stderr)
-                print(f"[LOGIN VERIFY] Contains 'signinFrame' in source: {'signinFrame' in page_source_check}", file=sys.stderr)
-                print(f"[LOGIN VERIFY] Contains 'Dashboard' in title: {'Dashboard' in final_title}", file=sys.stderr)
+                # Ensure we're in default content
+                self.driver.switch_to.default_content()
+                
+                # ✅ STEP 7.1: Quick verification - check page state WITHOUT navigating (saves time)
+                print("[STEP 7.1] Verifying login state (current page check)...", file=sys.stderr)
+                time.sleep(0.5)  # Brief wait for page state to settle
+                
+                current_url = self.driver.current_url
+                current_title = self.driver.title
+                page_source_sample = self.driver.page_source[:1000] if len(self.driver.page_source) > 0 else ""
+                
+                print(f"[LOGIN VERIFY] Current URL: {current_url}", file=sys.stderr)
+                print(f"[LOGIN VERIFY] Current title: {current_title}", file=sys.stderr)
+                print(f"[LOGIN VERIFY] Contains 'Login' in title: {'Login' in current_title}", file=sys.stderr)
+                print(f"[LOGIN VERIFY] Contains 'signinFrame' in source: {'signinFrame' in page_source_sample}", file=sys.stderr)
                 
                 # ✅ CRITICAL: Must NOT be on login page
-                if "Login" in final_title:
-                    print("[ERROR] Login failed - redirected to login page when accessing Dashboard", file=sys.stderr)
-                    print(f"[ERROR] Title: {final_title}, URL: {final_url}", file=sys.stderr)
+                if "Login" in current_title and "Dashboard" not in current_title:
+                    print("[ERROR] Login failed - still on login page", file=sys.stderr)
+                    # Try one more navigation to Dashboard as fallback verification
+                    print("[RETRY] Attempting Dashboard navigation for final verification...", file=sys.stderr)
+                    dashboard_url = "https://academia.srmist.edu.in/#Page:Dashboard"
+                    self.driver.get(dashboard_url)
+                    time.sleep(2)
+                    final_url = self.driver.current_url
+                    final_title = self.driver.title
+                    final_source_check = self.driver.page_source[:1000] if len(self.driver.page_source) > 0 else ""
+                    
+                    print(f"[LOGIN VERIFY] After Dashboard navigation - URL: {final_url}", file=sys.stderr)
+                    print(f"[LOGIN VERIFY] After Dashboard navigation - Title: {final_title}", file=sys.stderr)
+                    
+                    if "Login" in final_title and "Dashboard" not in final_title:
+                        print("[ERROR] Login failed - redirected to login page", file=sys.stderr)
+                        print(f"[ERROR] Title: {final_title}, URL: {final_url}", file=sys.stderr)
+                        return False
+                    
+                    if "signinFrame" in final_source_check:
+                        print("[ERROR] Login failed - login frame present on Dashboard page", file=sys.stderr)
+                        print(f"[ERROR] Title: {final_title}, URL: {final_url}", file=sys.stderr)
+                        return False
+                
+                if "signinFrame" in page_source_sample:
+                    print("[ERROR] Login failed - login frame still present", file=sys.stderr)
                     return False
                 
-                if "signinFrame" in page_source_check:
-                    print("[ERROR] Login failed - login frame present on Dashboard page", file=sys.stderr)
-                    print(f"[ERROR] Title: {final_title}, URL: {final_url}", file=sys.stderr)
-                    return False
-                
-                # ✅ CRITICAL: Must be on Dashboard (explicit verification)
-                if "Dashboard" not in final_title:
-                    print("[ERROR] Login verification failed - not on Dashboard after navigation", file=sys.stderr)
-                    print(f"[ERROR] Title: {final_title}, URL: {final_url}", file=sys.stderr)
-                    return False
-                
-                print(f"[OK] Login verified! Successfully accessed Dashboard - Final URL: {final_url}, Final Title: {final_title}", file=sys.stderr)
+                print(f"[OK] Login verified! Current page: {current_title}", file=sys.stderr)
                 
                 # Save session if enabled
                 if self.use_session:
@@ -471,6 +505,7 @@ class SRMAcademiaScraperSelenium:
                 
                 return True
                 
+            
             except (TimeoutException, WebDriverException) as e:
                 # Detailed error logging
                 try:
@@ -486,9 +521,9 @@ class SRMAcademiaScraperSelenium:
                     print(f"[ERROR] Could not get error state: {debug_e}", file=sys.stderr)
                 
                 if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
-                    print("[ERROR] Browser crashed while waiting for dashboard", file=sys.stderr)
+                    print("[ERROR] Browser crashed while waiting for login completion", file=sys.stderr)
                     return False
-                print(f"[ERROR] Login failed - timeout waiting for dashboard. Exception: {type(e).__name__}: {str(e)}", file=sys.stderr)
+                print(f"[ERROR] Login failed - timeout/error during verification. Exception: {type(e).__name__}: {str(e)}", file=sys.stderr)
                 return False
                 
         except Exception as e:
