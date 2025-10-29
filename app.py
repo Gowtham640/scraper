@@ -22,7 +22,9 @@ from api_wrapper import (
     api_get_calendar_data,
     api_get_timetable_data,
     api_get_attendance_data,
-    api_get_marks_data
+    api_get_marks_data,
+    api_get_static_data,
+    api_get_dynamic_data
 )
 
 app = Flask(__name__)
@@ -143,6 +145,22 @@ def handle_action(action, email, password, force_refresh):
             }
         return api_get_all_data(email, password, force_refresh)
     
+    elif action == 'get_static_data':
+        if not email:
+            return {
+                "success": False,
+                "error": "Email required"
+            }
+        return api_get_static_data(email, password, force_refresh)
+    
+    elif action == 'get_dynamic_data':
+        if not email:
+            return {
+                "success": False,
+                "error": "Email required"
+            }
+        return api_get_dynamic_data(email, password)
+    
     elif action == 'get_calendar_data':
         if not email or not password:
             return {
@@ -182,6 +200,8 @@ def handle_action(action, email, password, force_refresh):
             "available_actions": [
                 "validate_credentials",
                 "get_all_data",
+                "get_static_data",
+                "get_dynamic_data",
                 "get_calendar_data",
                 "get_timetable_data",
                 "get_attendance_data",

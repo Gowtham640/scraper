@@ -1072,8 +1072,17 @@ def api_get_marks_data(email, password):
                 print(f"[API] Error closing scraper: {e}", file=sys.stderr)
 
 
-def get_calendar_data_with_scraper(scraper, email, password, force_refresh=False):
-    """Get calendar data using existing scraper instance"""
+def get_calendar_data_with_scraper(scraper, email, password, force_refresh=False, skip_login_check=False):
+    """
+    Get calendar data using existing scraper instance
+    
+    Args:
+        scraper: Selenium scraper instance
+        email: User email
+        password: User password (optional if skip_login_check=True)
+        force_refresh: Force refresh cached data
+        skip_login_check: If True, skip is_logged_in() check and assume already logged in
+    """
     try:
         print(f"[UNIFIED API] Getting calendar data for: {email}", file=sys.stderr)
 
@@ -1094,18 +1103,23 @@ def get_calendar_data_with_scraper(scraper, email, password, force_refresh=False
         print("[UNIFIED API] Cache expired or empty - fetching fresh calendar data", file=sys.stderr)
 
         html_content = None
-        # Check if browser is already logged in (real-time state check)
-        if scraper.is_logged_in():
-            print("[UNIFIED API] Browser already logged in - fetching calendar data directly", file=sys.stderr)
+        # Optimize: Skip login check if we know session is valid (Phase 2 optimization)
+        if skip_login_check:
+            print("[UNIFIED API] Phase 2 optimized: Skipping login check, assuming already logged in", file=sys.stderr)
             html_content = scraper.get_calendar_data()
         else:
-            # Browser not logged in - need to login first
-            print("[UNIFIED API] Browser not logged in - attempting login for calendar", file=sys.stderr)
-            if not scraper.login(email, password):
-                print("[UNIFIED API] Login failed for calendar!", file=sys.stderr)
-                return {"success": False, "error": "Login failed"}
-            print("[UNIFIED API] Login successful for calendar!", file=sys.stderr)
-            html_content = scraper.get_calendar_data()
+            # Check if browser is already logged in (real-time state check)
+            if scraper.is_logged_in():
+                print("[UNIFIED API] Browser already logged in - fetching calendar data directly", file=sys.stderr)
+                html_content = scraper.get_calendar_data()
+            else:
+                # Browser not logged in - need to login first
+                print("[UNIFIED API] Browser not logged in - attempting login for calendar", file=sys.stderr)
+                if not scraper.login(email, password):
+                    print("[UNIFIED API] Login failed for calendar!", file=sys.stderr)
+                    return {"success": False, "error": "Login failed"}
+                print("[UNIFIED API] Login successful for calendar!", file=sys.stderr)
+                html_content = scraper.get_calendar_data()
         
         # If data fetch failed after login, return error
         if html_content is None:
@@ -1161,30 +1175,44 @@ def get_calendar_data_with_scraper(scraper, email, password, force_refresh=False
         return {"success": False, "error": f"API Error: {str(e)}"}
 
 
-def get_attendance_and_marks_data_with_scraper(scraper, email, password):
-    """Get both attendance and marks data from the same page (using individual function logic)"""
+def get_attendance_and_marks_data_with_scraper(scraper, email, password, skip_login_check=False):
+    """
+    Get both attendance and marks data from the same page (using individual function logic)
+    
+    Args:
+        scraper: Selenium scraper instance
+        email: User email
+        password: User password (optional if skip_login_check=True)
+        skip_login_check: If True, skip is_logged_in() check and assume already logged in
+    """
     try:
         print(f"[UNIFIED API] Getting attendance and marks data for: {email}", file=sys.stderr)
         
         # Use the EXACT same logic as individual functions - fetch page once, extract both
         html_content = None
-        # Check if browser is already logged in (real-time state check)
-        if scraper.is_logged_in():
-            print("[UNIFIED API] Browser already logged in - fetching attendance/marks data directly", file=sys.stderr)
+        # Optimize: Skip login check if we know session is valid (Phase 2 optimization)
+        if skip_login_check:
+            print("[UNIFIED API] Phase 2 optimized: Skipping login check, assuming already logged in", file=sys.stderr)
             # Use get_marks_page_html for proper validation (same as individual function)
             html_content = get_marks_page_html(scraper)
         else:
-            # Browser not logged in - need to login first
-            print("[UNIFIED API] Browser not logged in - attempting login for attendance/marks", file=sys.stderr)
-            if not scraper.login(email, password):
-                print("[UNIFIED API] Login failed!", file=sys.stderr)
-                return {
-                    "attendance": {"success": False, "error": "Login failed"},
-                    "marks": {"success": False, "error": "Login failed"}
-                }
-            print("[UNIFIED API] Login successful!", file=sys.stderr)
-            # Use get_marks_page_html for proper validation (same as individual function)
-            html_content = get_marks_page_html(scraper)
+            # Check if browser is already logged in (real-time state check)
+            if scraper.is_logged_in():
+                print("[UNIFIED API] Browser already logged in - fetching attendance/marks data directly", file=sys.stderr)
+                # Use get_marks_page_html for proper validation (same as individual function)
+                html_content = get_marks_page_html(scraper)
+            else:
+                # Browser not logged in - need to login first
+                print("[UNIFIED API] Browser not logged in - attempting login for attendance/marks", file=sys.stderr)
+                if not scraper.login(email, password):
+                    print("[UNIFIED API] Login failed!", file=sys.stderr)
+                    return {
+                        "attendance": {"success": False, "error": "Login failed"},
+                        "marks": {"success": False, "error": "Login failed"}
+                    }
+                print("[UNIFIED API] Login successful!", file=sys.stderr)
+                # Use get_marks_page_html for proper validation (same as individual function)
+                html_content = get_marks_page_html(scraper)
 
         if not html_content:
             print("[UNIFIED API] Failed to get HTML content after all attempts", file=sys.stderr)
@@ -1290,24 +1318,37 @@ def get_attendance_and_marks_data_with_scraper(scraper, email, password):
         }
 
 
-def get_timetable_data_with_scraper(scraper, email, password):
-    """Get timetable data using existing scraper instance"""
+def get_timetable_data_with_scraper(scraper, email, password, skip_login_check=False):
+    """
+    Get timetable data using existing scraper instance
+    
+    Args:
+        scraper: Selenium scraper instance
+        email: User email
+        password: User password (optional if skip_login_check=True)
+        skip_login_check: If True, skip is_logged_in() check and assume already logged in
+    """
     try:
         print(f"[UNIFIED API] Getting timetable data for: {email}", file=sys.stderr)
         
         html_content = None
-        # Check if browser is already logged in (real-time state check)
-        if scraper.is_logged_in():
-            print("[UNIFIED API] Browser already logged in - fetching timetable data directly", file=sys.stderr)
+        # Optimize: Skip login check if we know session is valid (Phase 2 optimization)
+        if skip_login_check:
+            print("[UNIFIED API] Phase 2 optimized: Skipping login check, assuming already logged in", file=sys.stderr)
             html_content = get_timetable_page_html(scraper)
         else:
-            # Browser not logged in - need to login first
-            print("[UNIFIED API] Browser not logged in - attempting login for timetable", file=sys.stderr)
-            if not scraper.login(email, password):
-                print("[UNIFIED API] Login failed for timetable!", file=sys.stderr)
-                return {"success": False, "error": "Login failed"}
-            print("[UNIFIED API] Login successful for timetable!", file=sys.stderr)
-            html_content = get_timetable_page_html(scraper)
+            # Check if browser is already logged in (real-time state check)
+            if scraper.is_logged_in():
+                print("[UNIFIED API] Browser already logged in - fetching timetable data directly", file=sys.stderr)
+                html_content = get_timetable_page_html(scraper)
+            else:
+                # Browser not logged in - need to login first
+                print("[UNIFIED API] Browser not logged in - attempting login for timetable", file=sys.stderr)
+                if not scraper.login(email, password):
+                    print("[UNIFIED API] Login failed for timetable!", file=sys.stderr)
+                    return {"success": False, "error": "Login failed"}
+                print("[UNIFIED API] Login successful for timetable!", file=sys.stderr)
+                html_content = get_timetable_page_html(scraper)
         
         # If data fetch failed after login, return error
         if html_content is None:
@@ -1574,6 +1615,298 @@ def api_get_all_data(email, password=None, force_refresh=False):
                 print(f"[UNIFIED API] Error closing scraper: {e}", file=sys.stderr)
 
 
+def api_get_static_data(email, password=None, force_refresh=False):
+    """
+    API function to get static (cacheable) data: Calendar + Timetable.
+    This data should be cached on the frontend and fetched only once.
+    
+    Args:
+        email: User email (required)
+        password: User password (optional - will use existing session if not provided)
+        force_refresh: Force refresh cached data
+    
+    Returns:
+        Dict with success status and data for calendar and timetable
+    """
+    print(f"[STATIC DATA API] Getting static data (Calendar + Timetable) for: {email}", file=sys.stderr)
+    print(f"[STATIC DATA API] Password provided: {password is not None}", file=sys.stderr)
+    
+    scraper = None
+    start_time = time.time()
+    try:
+        # Initialize single scraper instance with per-user session
+        scraper = SRMAcademiaScraperSelenium(headless=True, use_session=True, user_email=email)
+        
+        # Track results
+        results = {}
+        successful_data_types = 0
+        total_data_types = 2  # calendar, timetable
+        
+        # Check if session is valid
+        session_valid = scraper.is_session_valid()
+        print(f"[STATIC DATA API] Session valid: {session_valid}", file=sys.stderr)
+        
+        # SMART SESSION LOGIC: Check session validity FIRST, then login if needed
+        if session_valid:
+            # Session exists and is valid → Skip login
+            print("[STATIC DATA API] Valid session found - skipping login", file=sys.stderr)
+        elif password:
+            # No valid session → Login with password
+            print("[STATIC DATA API] No valid session - attempting login with provided password", file=sys.stderr)
+            if not scraper.login(email, password):
+                print("[STATIC DATA API] Login failed!", file=sys.stderr)
+                return {"success": False, "error": "login_failed", "message": "Invalid credentials"}
+            print("[STATIC DATA API] Login successful!", file=sys.stderr)
+        else:
+            # No valid session and no password provided
+            print("[STATIC DATA API] No valid session and no password provided", file=sys.stderr)
+            return {
+                "success": False,
+                "error": "session_expired",
+                "message": "Session expired. Please re-authenticate with your password."
+            }
+        
+        # Fetch calendar data
+        # Phase 2 optimization: Skip login check since we've already validated/established session
+        print(f"[STATIC DATA API] Fetching calendar data...", file=sys.stderr)
+        try:
+            calendar_result = get_calendar_data_with_scraper(scraper, email, password, force_refresh, skip_login_check=True)
+            results['calendar'] = calendar_result
+            
+            if calendar_result.get('success', False):
+                successful_data_types += 1
+                print(f"[STATIC DATA API] ✓ calendar data fetched successfully", file=sys.stderr)
+            else:
+                print(f"[STATIC DATA API] ✗ calendar data failed: {calendar_result.get('error', 'Unknown error')}", file=sys.stderr)
+                
+        except Exception as e:
+            print(f"[STATIC DATA API] ✗ calendar data error: {e}", file=sys.stderr)
+            results['calendar'] = {
+                "success": False,
+                "error": f"Exception: {str(e)}",
+                "type": "calendar",
+                "count": 0
+            }
+        
+        # Fetch timetable data
+        # Phase 2 optimization: Skip login check since we've already validated/established session
+        print(f"[STATIC DATA API] Fetching timetable data...", file=sys.stderr)
+        try:
+            timetable_result = get_timetable_data_with_scraper(scraper, email, password, skip_login_check=True)
+            results['timetable'] = timetable_result
+            
+            if timetable_result.get('success', False):
+                successful_data_types += 1
+                print(f"[STATIC DATA API] ✓ timetable data fetched successfully", file=sys.stderr)
+            else:
+                print(f"[STATIC DATA API] ✗ timetable data failed: {timetable_result.get('error', 'Unknown error')}", file=sys.stderr)
+                
+        except Exception as e:
+            print(f"[STATIC DATA API] ✗ timetable data error: {e}", file=sys.stderr)
+            results['timetable'] = {
+                "success": False,
+                "error": f"Exception: {str(e)}",
+                "type": "timetable",
+                "count": 0
+            }
+        
+        # Calculate fetch duration
+        fetch_duration = time.time() - start_time
+        
+        # Determine overall success
+        overall_success = successful_data_types > 0  # Success if at least one data type worked
+        
+        # Create response with metadata indicating this is cacheable static data
+        response = {
+            "success": overall_success,
+            "data": {
+                "calendar": results.get('calendar', {"success": False, "error": "Not attempted"}),
+                "timetable": results.get('timetable', {"success": False, "error": "Not attempted"})
+            },
+            "metadata": {
+                "type": "static_data",
+                "cacheable": True,
+                "cache_hint": "frontend_cache",
+                "generated_at": datetime.now().isoformat(),
+                "fetch_duration_seconds": round(fetch_duration, 2),
+                "source": "SRM Academia Portal - Static Data (Calendar + Timetable)",
+                "email": email,
+                "total_data_types": total_data_types,
+                "successful_data_types": successful_data_types,
+                "force_refresh": force_refresh,
+                "single_browser_session": True,
+                "phase_2_optimizations": [
+                    "skip_redundant_login_checks",
+                    "session_state_reuse",
+                    "optimized_helper_functions"
+                ]
+            }
+        }
+        
+        # Add error field if overall success is False
+        if not overall_success:
+            response["error"] = f"All static data types failed. Success rate: {(successful_data_types / total_data_types) * 100:.1f}%"
+        
+        print(f"[STATIC DATA API] Completed: {successful_data_types}/{total_data_types} data types successful in {fetch_duration:.2f}s", file=sys.stderr)
+        
+        return response
+        
+    except Exception as e:
+        print(f"[STATIC DATA API] Error in static data fetch: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        return {"success": False, "error": f"Static Data API Error: {str(e)}"}
+    
+    finally:
+        if scraper:
+            try:
+                scraper.close()
+                print("[STATIC DATA API] Browser session closed", file=sys.stderr)
+            except Exception as e:
+                print(f"[STATIC DATA API] Error closing scraper: {e}", file=sys.stderr)
+
+
+def api_get_dynamic_data(email, password=None):
+    """
+    API function to get dynamic (non-cacheable) data: Attendance + Marks.
+    This data should be fetched fresh on every request.
+    
+    Args:
+        email: User email (required)
+        password: User password (optional - will use existing session if not provided)
+    
+    Returns:
+        Dict with success status and data for attendance and marks
+    """
+    print(f"[DYNAMIC DATA API] Getting dynamic data (Attendance + Marks) for: {email}", file=sys.stderr)
+    print(f"[DYNAMIC DATA API] Password provided: {password is not None}", file=sys.stderr)
+    
+    scraper = None
+    start_time = time.time()
+    try:
+        # Initialize single scraper instance with per-user session
+        scraper = SRMAcademiaScraperSelenium(headless=True, use_session=True, user_email=email)
+        
+        # Check if session is valid
+        session_valid = scraper.is_session_valid()
+        print(f"[DYNAMIC DATA API] Session valid: {session_valid}", file=sys.stderr)
+        
+        # SMART SESSION LOGIC: Check session validity FIRST, then login if needed
+        if session_valid:
+            # Session exists and is valid → Skip login
+            print("[DYNAMIC DATA API] Valid session found - skipping login", file=sys.stderr)
+        elif password:
+            # No valid session → Login with password
+            print("[DYNAMIC DATA API] No valid session - attempting login with provided password", file=sys.stderr)
+            if not scraper.login(email, password):
+                print("[DYNAMIC DATA API] Login failed!", file=sys.stderr)
+                return {"success": False, "error": "login_failed", "message": "Invalid credentials"}
+            print("[DYNAMIC DATA API] Login successful!", file=sys.stderr)
+        else:
+            # No valid session and no password provided
+            print("[DYNAMIC DATA API] No valid session and no password provided", file=sys.stderr)
+            return {
+                "success": False,
+                "error": "session_expired",
+                "message": "Session expired. Please re-authenticate with your password."
+            }
+        
+        # Fetch attendance and marks data together (optimized - single page fetch)
+        # Phase 2 optimization: Skip login check since we've already validated/established session
+        print(f"[DYNAMIC DATA API] Fetching attendance and marks data together...", file=sys.stderr)
+        try:
+            combined_result = get_attendance_and_marks_data_with_scraper(scraper, email, password, skip_login_check=True)
+            attendance_result = combined_result['attendance']
+            marks_result = combined_result['marks']
+            
+            # Track success
+            successful_data_types = 0
+            total_data_types = 2  # attendance, marks
+            
+            if attendance_result.get('success', False):
+                successful_data_types += 1
+                print(f"[DYNAMIC DATA API] ✓ attendance data fetched successfully", file=sys.stderr)
+            else:
+                print(f"[DYNAMIC DATA API] ✗ attendance data failed: {attendance_result.get('error', 'Unknown error')}", file=sys.stderr)
+                
+            if marks_result.get('success', False):
+                successful_data_types += 1
+                print(f"[DYNAMIC DATA API] ✓ marks data fetched successfully", file=sys.stderr)
+            else:
+                print(f"[DYNAMIC DATA API] ✗ marks data failed: {marks_result.get('error', 'Unknown error')}", file=sys.stderr)
+                
+        except Exception as e:
+            print(f"[DYNAMIC DATA API] ✗ attendance/marks data error: {e}", file=sys.stderr)
+            attendance_result = {
+                "success": False,
+                "error": f"Exception: {str(e)}",
+                "type": "attendance",
+                "count": 0
+            }
+            marks_result = {
+                "success": False,
+                "error": f"Exception: {str(e)}",
+                "type": "marks",
+                "count": 0
+            }
+            successful_data_types = 0
+            total_data_types = 2
+        
+        # Calculate fetch duration
+        fetch_duration = time.time() - start_time
+        
+        # Determine overall success
+        overall_success = successful_data_types > 0  # Success if at least one data type worked
+        
+        # Create response with metadata indicating this is non-cacheable dynamic data
+        response = {
+            "success": overall_success,
+            "data": {
+                "attendance": attendance_result,
+                "marks": marks_result
+            },
+            "metadata": {
+                "type": "dynamic_data",
+                "cacheable": False,
+                "cache_hint": "no_cache",
+                "generated_at": datetime.now().isoformat(),
+                "fetch_duration_seconds": round(fetch_duration, 2),
+                "source": "SRM Academia Portal - Dynamic Data (Attendance + Marks)",
+                "email": email,
+                "total_data_types": total_data_types,
+                "successful_data_types": successful_data_types,
+                "single_browser_session": True,
+                "phase_2_optimizations": [
+                    "skip_redundant_login_checks",
+                    "session_state_reuse",
+                    "optimized_helper_functions"
+                ]
+            }
+        }
+        
+        # Add error field if overall success is False
+        if not overall_success:
+            response["error"] = f"All dynamic data types failed. Success rate: {(successful_data_types / total_data_types) * 100:.1f}%"
+        
+        print(f"[DYNAMIC DATA API] Completed: {successful_data_types}/{total_data_types} data types successful in {fetch_duration:.2f}s", file=sys.stderr)
+        
+        return response
+        
+    except Exception as e:
+        print(f"[DYNAMIC DATA API] Error in dynamic data fetch: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        return {"success": False, "error": f"Dynamic Data API Error: {str(e)}"}
+    
+    finally:
+        if scraper:
+            try:
+                scraper.close()
+                print("[DYNAMIC DATA API] Browser session closed", file=sys.stderr)
+            except Exception as e:
+                print(f"[DYNAMIC DATA API] Error closing scraper: {e}", file=sys.stderr)
+
+
 def api_validate_credentials(email, password):
     """
     API function to validate user credentials via portal login.
@@ -1657,6 +1990,20 @@ if __name__ == "__main__":
                 result = {"success": False, "error": "Email is required"}
             else:
                 result = api_get_all_data(email, password, force_refresh)
+
+        elif action == 'get_static_data':
+            # Get static data (Calendar + Timetable): email REQUIRED, password OPTIONAL (uses session if available)
+            if not email:
+                result = {"success": False, "error": "Email is required"}
+            else:
+                result = api_get_static_data(email, password, force_refresh)
+
+        elif action == 'get_dynamic_data':
+            # Get dynamic data (Attendance + Marks): email REQUIRED, password OPTIONAL (uses session if available)
+            if not email:
+                result = {"success": False, "error": "Email is required"}
+            else:
+                result = api_get_dynamic_data(email, password)
 
         elif action == 'get_calendar_data':
             # Calendar: REQUIRES password
