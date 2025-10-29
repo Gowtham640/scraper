@@ -534,17 +534,65 @@ class SRMAcademiaScraperSelenium:
             
             self.driver.get(planner_url)
             
-            # ✅ PHASE 2 FIX: Reduced wait time from 3s to 1.5s + early login check
-            time.sleep(1.5)  # Reduced from 3s to 1.5s
+            # ✅ CRITICAL: Early login page detection (before waiting for content)
+            print("[STEP 2] Checking for login page (early exit optimization)...", file=sys.stderr)
+            time.sleep(0.5)  # Small wait for page to start loading
             
-            # ✅ PHASE 2 FIX: Early login page detection (saves time)
             current_title = self.driver.title
-            if "Login" in current_title:
-                print("[WARNING] Redirected to login page - session may have expired", file=sys.stderr)
-                print(f"[WARNING] Page title: {current_title}", file=sys.stderr)
+            current_url = self.driver.current_url
+            page_source_snippet = self.driver.page_source[:500]  # Small sample for quick check
+            
+            if "Login" in current_title or "signinFrame" in page_source_snippet:
+                print("[ERROR] Redirected to login page - session expired", file=sys.stderr)
+                print(f"[ERROR] Current title: {current_title}", file=sys.stderr)
+                print(f"[ERROR] Current URL: {current_url}", file=sys.stderr)
                 return None
             
-            print(f"[OK] Calendar page loaded: {self.driver.title}", file=sys.stderr)
+            print("[OK] Not on login page, proceeding with calendar extraction", file=sys.stderr)
+            
+            # ✅ CRITICAL: Wait for calendar table to load (like timetable does)
+            print("[STEP 3] Waiting for calendar table to load...", file=sys.stderr)
+            try:
+                # Wait for calendar table - try multiple selectors
+                selectors = [
+                    (By.TAG_NAME, 'table'),
+                    (By.CSS_SELECTOR, 'table'),
+                ]
+                
+                table_found = False
+                for by, selector in selectors:
+                    try:
+                        print(f"[DEBUG] Waiting for table with selector: {selector} (max 5s)", file=sys.stderr)
+                        WebDriverWait(self.driver, 5).until(
+                            EC.presence_of_element_located((by, selector))
+                        )
+                        print(f"[OK] Calendar table found with selector: {selector}", file=sys.stderr)
+                        table_found = True
+                        break
+                    except TimeoutException:
+                        print(f"[DEBUG] No table found with selector: {selector} (timed out after 5s)", file=sys.stderr)
+                        continue
+                
+                # Re-check for login page before final wait
+                if not table_found:
+                    # Double-check we're not on login page
+                    if "Login" in self.driver.title or "signinFrame" in self.driver.page_source[:500]:
+                        print("[ERROR] Login page detected after wait - session expired during navigation", file=sys.stderr)
+                        return None
+                    
+                    print("[WARN] No table found with any selector, continuing anyway...", file=sys.stderr)
+            except Exception as e:
+                print(f"[WARN] Error waiting for table: {e}", file=sys.stderr)
+            
+            # ✅ CRITICAL: Extra wait for JavaScript rendering (calendar needs time to render)
+            print("[STEP 4] Waiting for JavaScript rendering...", file=sys.stderr)
+            time.sleep(2)  # Give it time to fully render calendar content
+            
+            # Final login page check before returning
+            final_title = self.driver.title
+            if "Login" in final_title:
+                print("[ERROR] Login page detected at final check - session expired", file=sys.stderr)
+                return None
             
             # Double-check for login page in page source
             page_source_sample = self.driver.page_source[:1000]  # Check first 1000 chars for speed
@@ -552,7 +600,11 @@ class SRMAcademiaScraperSelenium:
                 print("[WARNING] Login iframe detected in page source - session expired", file=sys.stderr)
                 return None
             
-            # Get page source
+            print(f"[OK] Current URL: {self.driver.current_url}", file=sys.stderr)
+            print(f"[OK] Page title: {final_title}", file=sys.stderr)
+            print("[OK] Calendar page loaded successfully", file=sys.stderr)
+            
+            # Get page source AFTER dynamic content loads
             page_source = self.driver.page_source
             
             if not page_source:
@@ -561,6 +613,13 @@ class SRMAcademiaScraperSelenium:
             
             print(f"[OK] Page source received ({len(page_source)} characters)", file=sys.stderr)
             
+            # Final validation - check if page source is too small (likely login page)
+            if len(page_source) < 10000:  # Real calendar pages should be much larger
+                print(f"[WARN] Page source is very small ({len(page_source)} chars) - might be login page", file=sys.stderr)
+                if "Login" in page_source or "signinFrame" in page_source:
+                    print("[ERROR] Confirmed: This is a login page, not calendar", file=sys.stderr)
+                    return None
+            
             # Check if we got the right content
             if "Jul '25" in page_source and "Aug '25" in page_source:
                 print("[OK] Calendar content detected in page source", file=sys.stderr)
@@ -568,8 +627,10 @@ class SRMAcademiaScraperSelenium:
             else:
                 print("[WARNING] Calendar content not detected in page source", file=sys.stderr)
                 print(f"[DEBUG] Page source contains 'Jul': {'Jul' in page_source}", file=sys.stderr)
+                print(f"[DEBUG] Page source contains 'Aug': {'Aug' in page_source}", file=sys.stderr)
                 print(f"[DEBUG] Page source contains 'table': {'table' in page_source.lower()}", file=sys.stderr)
-                return page_source  # Return anyway, let the parser handle it
+                # Return anyway, let the parser handle it (might be different year/format)
+                return page_source
             
         except Exception as e:
             print(f"[ERROR] Failed to get calendar data: {e}", file=sys.stderr)
