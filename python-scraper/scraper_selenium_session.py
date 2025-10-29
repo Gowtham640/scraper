@@ -348,7 +348,7 @@ class SRMAcademiaScraperSelenium:
                 next_button = self.driver.find_element(By.ID, "nextbtn")
                 next_button.click()
                 print("[OK] Next button clicked", file=sys.stderr)
-                time.sleep(0.5)  # Optimized wait - explicit wait below will handle rest
+                # ✅ OPTIMIZED: No fixed sleep - smart wait below will return as soon as password field is ready
             except (NoSuchElementException, WebDriverException) as e:
                 if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
                     print("[ERROR] Browser crashed during next button click", file=sys.stderr)
@@ -366,11 +366,12 @@ class SRMAcademiaScraperSelenium:
                     pass
                 return False
             
-            # Find and fill password field
+            # ✅ OPTIMIZED: Find and fill password field (smart wait - returns as soon as ready, often faster than fixed sleep)
             print("[STEP 5] Entering password...", file=sys.stderr)
             try:
-                password_field = self.wait.until(
-                    EC.presence_of_element_located((By.ID, "password"))
+                # Use element_to_be_clickable - ensures field is ready and interactable, often faster than fixed sleep
+                password_field = WebDriverWait(self.driver, 10).until(
+                    EC.element_to_be_clickable((By.ID, "password"))
                 )
                 password_field.clear()
                 password_field.send_keys(password)
@@ -417,79 +418,52 @@ class SRMAcademiaScraperSelenium:
                     pass
                 return False
             
-            # Wait for login to complete
-            print("[STEP 7] Waiting for login to complete...", file=sys.stderr)
-            time.sleep(0.5)  # Optimized - WebDriverWait below handles rest
-            
-            # Switch back to default content
+            # Wait for login to process and switch back to default content
+            print("[STEP 7] Waiting for login to process...", file=sys.stderr)
+            time.sleep(1)  # Brief wait for login to process
             self.driver.switch_to.default_content()
             
-            # Check if login was successful
+            # ✅ CRITICAL: Verify login by explicitly navigating to Dashboard
+            # This ensures we're actually logged in, not just checking current page state
+            print("[STEP 7.1] Verifying login by navigating to Dashboard...", file=sys.stderr)
             try:
-                print("[STEP 7.1] Waiting for page navigation after login...", file=sys.stderr)
-                time.sleep(1)  # Give page time to navigate
+                # Explicitly navigate to Dashboard to verify weоприя access protected pages
+                dashboard_url = "https://academia.srmist.edu.in/#Page:Dashboard"
+                print(f"[DEBUG] Navigating to Dashboard: {dashboard_url}", file=sys.stderr)
+                self.driver.get(dashboard_url)
                 
-                # Get current state for debugging
-                try:
-                    current_url = self.driver.current_url
-                    current_title = self.driver.title
-                    page_source_snippet = self.driver.page_source[:500] if len(self.driver.page_source) > 0 else ""
-                    print(f"[DEBUG] After login click - URL: {current_url}", file=sys.stderr)
-                    print(f"[DEBUG] After login click - Title: {current_title}", file=sys.stderr)
-                    print(f"[DEBUG] After login click - Page source starts with: {page_source_snippet[:200]}", file=sys.stderr)
-                except Exception as debug_e:
-                    print(f"[WARNING] Could not get page state for debugging: {debug_e}", file=sys.stderr)
+                # Wait for page to load
+                time.sleep(2)  # Wait for navigation and page load
                 
-                # Wait for dashboard or any protected page to load
-                # ✅ FIXED: Must be on Dashboard, NOT on login page
-                print("[STEP 7.2] Waiting for dashboard to load (10s timeout)...", file=sys.stderr)
-                try:
-                    WebDriverWait(self.driver, 10).until(
-                        lambda driver: "Dashboard" in driver.title and "Login" not in driver.title
-                    )
-                except TimeoutException:
-                    # If Dashboard check fails, verify we're not on login page
-                    final_title_check = self.driver.title
-                    final_url_check = self.driver.current_url
-                    print(f"[ERROR] Timeout waiting for Dashboard. Current title: {final_title_check}, URL: {final_url_check}", file=sys.stderr)
-                    if "Login" in final_title_check or "signinFrame" in self.driver.page_source[:1000]:
-                        print("[ERROR] Still on login page after timeout - login likely failed", file=sys.stderr)
-                        return False
-                    # Maybe we're on a different page - check URL contains protected page indicator
-                    if "#Page:" not in final_url_check:
-                        print("[ERROR] Not on a protected page (#Page: missing from URL) - login likely failed", file=sys.stderr)
-                        return False
-                    print("[WARNING] Dashboard not in title, but URL suggests protected page - continuing", file=sys.stderr)
-                
-                # Verify final state - CRITICAL: Must NOT be on login page
+                # Check current state
                 final_url = self.driver.current_url
                 final_title = self.driver.title
                 page_source_check = self.driver.page_source[:1000] if len(self.driver.page_source) > 0 else ""
                 
-                print(f"[LOGIN VERIFY] Final URL: {final_url}", file=sys.stderr)
-                print(f"[LOGIN VERIFY] Final Title: {final_title}", file=sys.stderr)
+                print(f"[LOGIN VERIFY] After Dashboard navigation - URL: {final_url}", file=sys.stderr)
+                print(f"[LOGIN VERIFY] After Dashboard navigation - Title: {final_title}", file=sys.stderr)
                 print(f"[LOGIN VERIFY] Contains 'Login' in title: {'Login' in final_title}", file=sys.stderr)
                 print(f"[LOGIN VERIFY] Contains 'signinFrame' in source: {'signinFrame' in page_source_check}", file=sys.stderr)
                 print(f"[LOGIN VERIFY] Contains 'Dashboard' in title: {'Dashboard' in final_title}", file=sys.stderr)
                 
-                # Double-check we're not on login page - THIS IS CRITICAL
+                # ✅ CRITICAL: Must NOT be on login page
                 if "Login" in final_title:
-                    print("[ERROR] Login failed - still on login page! Title contains 'Login'", file=sys.stderr)
+                    print("[ERROR] Login failed - redirected to login page when accessing Dashboard", file=sys.stderr)
                     print(f"[ERROR] Title: {final_title}, URL: {final_url}", file=sys.stderr)
                     return False
                 
                 if "signinFrame" in page_source_check:
-                    print("[ERROR] Login failed - login frame still present in page source!", file=sys.stderr)
+                    print("[ERROR] Login failed - login frame present on Dashboard page", file=sys.stderr)
                     print(f"[ERROR] Title: {final_title}, URL: {final_url}", file=sys.stderr)
                     return False
                 
-                # Must be on Dashboard or protected page
-                if "Dashboard" not in final_title and "#Page:" not in final_url:
-                    print("[ERROR] Login verification failed - not on Dashboard and not on protected page", file=sys.stderr)
+                # ✅ CRITICAL: Must be on Dashboard (explicit verification)
+                if "Dashboard" not in final_title:
+                    print("[ERROR] Login verification failed - not on Dashboard after navigation", file=sys.stderr)
                     print(f"[ERROR] Title: {final_title}, URL: {final_url}", file=sys.stderr)
                     return False
                 
-                print(f"[OK] Login successful! Final URL: {final_url}, Final Title: {final_title}", file=sys.stderr)
+                print(f"[OK] Login verified! Successfully accessed Dashboard - Final URL: {final_url}, Final Title: {final_title}", file=sys.stderr)
                 
                 # Save session if enabled
                 if self.use_session:
