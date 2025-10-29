@@ -15,6 +15,10 @@ from calendar_scraper_fixed import extract_calendar_data_from_html
 from timetable_scraper import api_get_timetable_data, get_timetable_page_html, extract_timetable_data_from_html, create_do_timetable_json
 import re
 from bs4 import BeautifulSoup
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.by import By
 
 # ============================================================================
 # CACHING CONFIGURATION
@@ -191,17 +195,69 @@ def get_attendance_page_html(scraper):
         print(f"[STEP 1] Navigating to: {attendance_url}", file=sys.stderr)
         
         scraper.driver.get(attendance_url)
-        time.sleep(0.5)  # Reduced from 2s to 0.5s - just wait for basic page structure
+        time.sleep(0.5)  # Small wait for page to start loading
+        
+        # ✅ CRITICAL: Check for login page IMMEDIATELY
+        current_title = scraper.driver.title
+        page_source_check = scraper.driver.page_source[:1000] if len(scraper.driver.page_source) > 0 else ""
+        
+        if "Login" in current_title or "signinFrame" in page_source_check:
+            print("[ERROR] Redirected to login page - session expired", file=sys.stderr)
+            print(f"[ERROR] Current title: {current_title}", file=sys.stderr)
+            return None
+        
+        print("[OK] Not on login page, proceeding with attendance extraction", file=sys.stderr)
+        
+        # ✅ SMART WAIT: Wait for attendance table WITH ROWS (returns as soon as ready, max 8s)
+        print("[STEP 2] Smart wait for attendance table with rows...", file=sys.stderr)
+        
+        def attendance_table_has_rows(driver):
+            """Custom condition: Check if table exists AND has rows - returns when ready"""
+            try:
+                tables = driver.find_elements(By.TAG_NAME, 'table')
+                if len(tables) == 0:
+                    return False
+                
+                # Check if any table has rows with attendance data
+                for table in tables:
+                    rows = table.find_elements(By.TAG_NAME, 'tr')
+                    if len(rows) > 0:
+                        # Check if this looks like attendance table
+                        table_text = table.text.lower()
+                        if any(keyword in table_text for keyword in ['hours conducted', 'attn %', 'course title', 'attendance']):
+                            print(f"[OK] Found attendance table with {len(rows)} rows", file=sys.stderr)
+                            return True
+                return False
+            except Exception as e:
+                return False
+        
+        try:
+            WebDriverWait(scraper.driver, 8).until(attendance_table_has_rows)
+            print("[OK] Attendance table with rows found!", file=sys.stderr)
+        except TimeoutException:
+            print("[WARN] Timeout waiting for attendance table (8s) - checking what we have...", file=sys.stderr)
+            # Check if we're on login page
+            if "Login" in scraper.driver.title or "signinFrame" in scraper.driver.page_source[:5000]:
+                print("[ERROR] Login page detected after wait - session expired", file=sys.stderr)
+                return None
+            print("[WARN] Table not found but continuing anyway...", file=sys.stderr)
+        
+        # ✅ CRITICAL: Extra wait for JavaScript rendering (attendance needs time to fully render)
+        print("[STEP 3] Waiting for JavaScript to fully render attendance content...", file=sys.stderr)
+        time.sleep(2)  # Give additional time for full attendance rendering
+        print("[OK] Finished waiting for JS rendering", file=sys.stderr)
         
         print(f"[OK] Current URL: {scraper.driver.current_url}", file=sys.stderr)
         print(f"[OK] Page title: {scraper.driver.title}", file=sys.stderr)
         
-        # Skip document.readyState wait - we disabled images, so basic structure loads quickly
-        print("[OK] Attendance page loaded successfully", file=sys.stderr)
-        
-        # Get page source
+        # Get page source AFTER dynamic content loads
         page_source = scraper.driver.page_source
         
+        if not page_source:
+            print("[ERROR] No page source received", file=sys.stderr)
+            return None
+        
+        print(f"[OK] Page source received ({len(page_source)} characters)", file=sys.stderr)
         return page_source
         
     except Exception as e:
@@ -569,10 +625,7 @@ def get_marks_page_html(scraper):
         print(f"[MARKS] Navigating to: {attendance_url}", file=sys.stderr)
         
         scraper.driver.get(attendance_url)
-        time.sleep(0.5)  # Optimized - reduced from 2s to 0.5s
-        
-        print(f"[MARKS] Current URL: {scraper.driver.current_url}", file=sys.stderr)
-        print(f"[MARKS] Page title: {scraper.driver.title}", file=sys.stderr)
+        time.sleep(0.5)  # Small wait for page to start loading
         
         # ✅ CRITICAL: Check for login page IMMEDIATELY
         current_title = scraper.driver.title
@@ -583,7 +636,47 @@ def get_marks_page_html(scraper):
             print(f"[MARKS] Title: {current_title}, Contains signinFrame: {'signinFrame' in page_source_check}", file=sys.stderr)
             return None
         
-        # Get page source
+        # ✅ SMART WAIT: Wait for attendance table WITH ROWS (returns as soon as ready, max 8s)
+        print("[MARKS] Smart wait for attendance table with rows...", file=sys.stderr)
+        
+        def attendance_table_has_rows(driver):
+            """Custom condition: Check if table exists AND has rows - returns when ready"""
+            try:
+                tables = driver.find_elements(By.TAG_NAME, 'table')
+                if len(tables) == 0:
+                    return False
+                
+                # Check if any table has rows with attendance data
+                for table in tables:
+                    rows = table.find_elements(By.TAG_NAME, 'tr')
+                    if len(rows) > 0:
+                        # Check if this looks like attendance table
+                        table_text = table.text.lower()
+                        if any(keyword in table_text for keyword in ['hours conducted', 'attn %', 'course title', 'attendance']):
+                            print(f"[MARKS] Found attendance table with {len(rows)} rows", file=sys.stderr)
+                            return True
+                return False
+            except Exception as e:
+                return False
+        
+        try:
+            WebDriverWait(scraper.driver, 8).until(attendance_table_has_rows)
+            print("[MARKS] Attendance table with rows found!", file=sys.stderr)
+        except TimeoutException:
+            print("[MARKS] Timeout waiting for attendance table (8s) - checking what we have...", file=sys.stderr)
+            # Check if we're on login page
+            if "Login" in scraper.driver.title or "signinFrame" in scraper.driver.page_source[:5000]:
+                print(f"[MARKS] ✗ ERROR: Login page detected after wait - session expired", file=sys.stderr)
+                print(f"[MARKS] Title: {scraper.driver.title}", file=sys.stderr)
+                return None
+            print("[MARKS] WARN: Table not found but continuing anyway...", file=sys.stderr)
+        
+        # ✅ CRITICAL: Extra wait for JavaScript rendering (attendance needs time to fully render)
+        print("[MARKS] Waiting for JavaScript to fully render attendance content...", file=sys.stderr)
+        time.sleep(2)  # Give additional time for full attendance rendering
+        print("[MARKS] Finished waiting for JS rendering", file=sys.stderr)
+        
+        # Get page source AFTER dynamic content loads
         page_source = scraper.driver.page_source
         page_length = len(page_source)
         print(f"[MARKS] Page source length: {page_length} characters", file=sys.stderr)
