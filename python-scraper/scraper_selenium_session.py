@@ -433,14 +433,23 @@ class SRMAcademiaScraperSelenium:
             print(f"[STEP 1] Navigating to: {planner_url}", file=sys.stderr)
             
             self.driver.get(planner_url)
-            time.sleep(3)  # Optimized - reduced from 10s to 3s
+            
+            # ✅ PHASE 2 FIX: Reduced wait time from 3s to 1.5s + early login check
+            time.sleep(1.5)  # Reduced from 3s to 1.5s
+            
+            # ✅ PHASE 2 FIX: Early login page detection (saves time)
+            current_title = self.driver.title
+            if "Login" in current_title:
+                print("[WARNING] Redirected to login page - session may have expired", file=sys.stderr)
+                print(f"[WARNING] Page title: {current_title}", file=sys.stderr)
+                return None
             
             print(f"[OK] Calendar page loaded: {self.driver.title}", file=sys.stderr)
             
-            # Check if we got redirected to login page
-            if "Login" in self.driver.title or "signinFrame" in self.driver.page_source:
-                print("[WARNING] Redirected to login page - session may have expired", file=sys.stderr)
-                print("[INFO] This is normal if session was created a while ago", file=sys.stderr)
+            # Double-check for login page in page source
+            page_source_sample = self.driver.page_source[:1000]  # Check first 1000 chars for speed
+            if "signinFrame" in page_source_sample:
+                print("[WARNING] Login iframe detected in page source - session expired", file=sys.stderr)
                 return None
             
             # Get page source

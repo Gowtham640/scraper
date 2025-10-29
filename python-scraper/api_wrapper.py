@@ -1350,14 +1350,30 @@ def get_timetable_data_with_scraper(scraper, email, password, skip_login_check=F
                 print("[UNIFIED API] Login successful for timetable!", file=sys.stderr)
                 html_content = get_timetable_page_html(scraper)
         
-        # If data fetch failed after login, return error
+        # ✅ PHASE 2 FIX: Improved error detection for login page redirects
         if html_content is None:
-            print("[UNIFIED API] Failed to get timetable HTML content after login", file=sys.stderr)
-            return {"success": False, "error": "Failed to get timetable data after login"}
+            print("[UNIFIED API] Failed to get timetable HTML content", file=sys.stderr)
+            # Check if we're on login page (session expired)
+            try:
+                if hasattr(scraper, 'driver') and scraper.driver:
+                    current_title = scraper.driver.title
+                    if "Login" in current_title:
+                        print("[UNIFIED API] Login page detected - session expired", file=sys.stderr)
+                        return {"success": False, "error": "Session expired - please re-authenticate"}
+            except:
+                pass
+            return {"success": False, "error": "Failed to get timetable data"}
 
         if not html_content:
             print("[UNIFIED API] Failed to get timetable HTML content after all attempts", file=sys.stderr)
             return {"success": False, "error": "Failed to get timetable data"}
+        
+        # ✅ PHASE 2 FIX: Validate we got actual timetable data, not login page
+        if len(html_content) < 10000:  # Login pages are much smaller
+            print(f"[UNIFIED API] WARNING: Page source too small ({len(html_content)} chars) - might be login page", file=sys.stderr)
+            if "Login" in html_content or "signinFrame" in html_content:
+                print("[UNIFIED API] ERROR: Confirmed login page - session expired", file=sys.stderr)
+                return {"success": False, "error": "Session expired during timetable fetch - please re-authenticate"}
         
         print(f"[UNIFIED API] Got timetable HTML content ({len(html_content)} characters)", file=sys.stderr)
         

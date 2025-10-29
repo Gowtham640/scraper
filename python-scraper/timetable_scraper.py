@@ -23,15 +23,33 @@ def get_timetable_page_html(scraper):
         
         scraper.driver.get(timetable_url)
         
+        # ✅ PHASE 2 FIX: Check for login page immediately after navigation (saves ~20s)
+        print("[STEP 2] Checking for login page (early exit optimization)...", file=sys.stderr)
+        time.sleep(0.5)  # Small wait for page to start loading
+        
+        # Early exit if we're on login page
+        current_title = scraper.driver.title
+        current_url = scraper.driver.current_url
+        page_source_snippet = scraper.driver.page_source[:500]  # Small sample for quick check
+        
+        if "Login" in current_title or "signinFrame" in page_source_snippet:
+            print("[ERROR] Redirected to login page - session expired", file=sys.stderr)
+            print(f"[ERROR] Current title: {current_title}", file=sys.stderr)
+            print(f"[ERROR] Current URL: {current_url}", file=sys.stderr)
+            return None  # Exit early - don't waste 20+ seconds waiting for tables
+        
+        print("[OK] Not on login page, proceeding with timetable extraction", file=sys.stderr)
+        
         # ✅ CRITICAL: Wait for dynamic content to load!
-        print("[STEP 2] Waiting for dynamic content to load...", file=sys.stderr)
+        print("[STEP 3] Waiting for dynamic content to load...", file=sys.stderr)
         
         # Wait for the page to be fully loaded (including JS execution)
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.webdriver.support import expected_conditions as EC
         from selenium.webdriver.common.by import By
         
-        # Wait up to 15 seconds for timetable table to appear
+        # ✅ PHASE 2 FIX: Reduced wait time from 5s to 2s per selector (saves ~12s)
+        # Wait up to 2 seconds for timetable table to appear
         # Try multiple selectors to catch different table structures
         table_found = False
         selectors = [
@@ -43,31 +61,51 @@ def get_timetable_page_html(scraper):
         
         for by, selector in selectors:
             try:
-                print(f"[DEBUG] Waiting for table with selector: {selector}", file=sys.stderr)
-                WebDriverWait(scraper.driver, 5).until(
+                print(f"[DEBUG] Waiting for table with selector: {selector} (max 2s)", file=sys.stderr)
+                WebDriverWait(scraper.driver, 2).until(  # Reduced from 5s to 2s
                     EC.presence_of_element_located((by, selector))
                 )
                 print(f"[OK] Table found with selector: {selector}", file=sys.stderr)
                 table_found = True
                 break
             except:
-                print(f"[DEBUG] No table found with selector: {selector}", file=sys.stderr)
+                print(f"[DEBUG] No table found with selector: {selector} (timed out after 2s)", file=sys.stderr)
                 continue
         
+        # ✅ PHASE 2 FIX: Re-check for login page before final wait
         if not table_found:
+            # Double-check we're not on login page
+            if "Login" in scraper.driver.title or "signinFrame" in scraper.driver.page_source[:500]:
+                print("[ERROR] Login page detected after wait - session expired during navigation", file=sys.stderr)
+                return None
+            
             print("[WARN] No table found with any selector, continuing anyway...", file=sys.stderr)
         
+        # ✅ PHASE 2 FIX: Reduced JS rendering wait from 2s to 1s
         # Extra wait for JavaScript rendering
-        time.sleep(2)  # Give it 2 seconds for full rendering
+        time.sleep(1)  # Reduced from 2s to 1s
         print("[OK] Waited for JS rendering", file=sys.stderr)
         
+        # Final login page check before returning
+        final_title = scraper.driver.title
+        if "Login" in final_title:
+            print("[ERROR] Login page detected at final check - session expired", file=sys.stderr)
+            return None
+        
         print(f"[OK] Current URL: {scraper.driver.current_url}", file=sys.stderr)
-        print(f"[OK] Page title: {scraper.driver.title}", file=sys.stderr)
+        print(f"[OK] Page title: {final_title}", file=sys.stderr)
         print("[OK] Timetable page loaded successfully", file=sys.stderr)
         
         # Get page source AFTER dynamic content loads
         page_source = scraper.driver.page_source
         print(f"[OK] Page source length: {len(page_source)} characters", file=sys.stderr)
+        
+        # Final validation - check if page source is too small (likely login page)
+        if len(page_source) < 10000:  # Real timetable pages should be much larger
+            print(f"[WARN] Page source is very small ({len(page_source)} chars) - might be login page", file=sys.stderr)
+            if "Login" in page_source or "signinFrame" in page_source:
+                print("[ERROR] Confirmed: This is a login page, not timetable", file=sys.stderr)
+                return None
         
         return page_source
         
