@@ -146,11 +146,13 @@ class SRMAcademiaScraperSelenium:
     
     def is_session_valid(self):
         """Check if the current session is still valid by actually testing it"""
+        print(f"[SESSION VALID CHECK] Starting - use_session: {self.use_session}, session_file: {self.session_file}", file=sys.stderr)
         if not self.use_session:
+            print("[SESSION VALID CHECK] Session disabled (serverless mode) - returning False", file=sys.stderr)
             return False
         
         if not os.path.exists(self.session_file):
-            print("[SESSION] No session file found", file=sys.stderr)
+            print(f"[SESSION VALID CHECK] No session file found: {self.session_file}", file=sys.stderr)
             return False
         
         try:
@@ -249,6 +251,9 @@ class SRMAcademiaScraperSelenium:
         """Login to the academia portal using Selenium with session management"""
         try:
             print(f"\n=== LOGIN WITH SELENIUM (Session: {self.use_session}) ===", file=sys.stderr)
+            print(f"[LOGIN DEBUG] Email: {email}", file=sys.stderr)
+            print(f"[LOGIN DEBUG] Password provided: {password is not None}", file=sys.stderr)
+            print(f"[LOGIN DEBUG] Password length: {len(password) if password else 0}", file=sys.stderr)
             
             # Don't skip login - always attempt it when this method is called
             # The session validation should be done before calling this method
@@ -324,7 +329,13 @@ class SRMAcademiaScraperSelenium:
                 if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
                     print("[ERROR] Browser crashed during email entry", file=sys.stderr)
                     return False
-                print("[ERROR] Could not find email field", file=sys.stderr)
+                print(f"[ERROR] Could not find email field - Exception: {type(e).__name__}: {str(e)}", file=sys.stderr)
+                try:
+                    current_url = self.driver.current_url
+                    current_title = self.driver.title
+                    print(f"[ERROR] Page state when email field failed - URL: {current_url}, Title: {current_title}", file=sys.stderr)
+                except:
+                    pass
                 try:
                     self.driver.switch_to.default_content()
                 except:
@@ -342,7 +353,13 @@ class SRMAcademiaScraperSelenium:
                 if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
                     print("[ERROR] Browser crashed during next button click", file=sys.stderr)
                     return False
-                print("[ERROR] Could not find Next button", file=sys.stderr)
+                print(f"[ERROR] Could not find Next button - Exception: {type(e).__name__}: {str(e)}", file=sys.stderr)
+                try:
+                    current_url = self.driver.current_url
+                    current_title = self.driver.title
+                    print(f"[ERROR] Page state when next button failed - URL: {current_url}, Title: {current_title}", file=sys.stderr)
+                except:
+                    pass
                 try:
                     self.driver.switch_to.default_content()
                 except:
@@ -362,7 +379,13 @@ class SRMAcademiaScraperSelenium:
                 if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
                     print("[ERROR] Browser crashed during password entry", file=sys.stderr)
                     return False
-                print("[ERROR] Could not find password field", file=sys.stderr)
+                print(f"[ERROR] Could not find password field - Exception: {type(e).__name__}: {str(e)}", file=sys.stderr)
+                try:
+                    current_url = self.driver.current_url
+                    current_title = self.driver.title
+                    print(f"[ERROR] Page state when password field failed - URL: {current_url}, Title: {current_title}", file=sys.stderr)
+                except:
+                    pass
                 try:
                     self.driver.switch_to.default_content()
                 except:
@@ -381,7 +404,13 @@ class SRMAcademiaScraperSelenium:
                 if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
                     print("[ERROR] Browser crashed during login button click", file=sys.stderr)
                     return False
-                print("[ERROR] Could not find login button", file=sys.stderr)
+                print(f"[ERROR] Could not find login button - Exception: {type(e).__name__}: {str(e)}", file=sys.stderr)
+                try:
+                    current_url = self.driver.current_url
+                    current_title = self.driver.title
+                    print(f"[ERROR] Page state when login button failed - URL: {current_url}, Title: {current_title}", file=sys.stderr)
+                except:
+                    pass
                 try:
                     self.driver.switch_to.default_content()
                 except:
@@ -397,12 +426,36 @@ class SRMAcademiaScraperSelenium:
             
             # Check if login was successful
             try:
-                # Wait for dashboard or any protected page to load (with shorter timeout)
+                print("[STEP 7.1] Waiting for page navigation after login...", file=sys.stderr)
+                time.sleep(1)  # Give page time to navigate
+                
+                # Get current state for debugging
+                try:
+                    current_url = self.driver.current_url
+                    current_title = self.driver.title
+                    page_source_snippet = self.driver.page_source[:500] if len(self.driver.page_source) > 0 else ""
+                    print(f"[DEBUG] After login click - URL: {current_url}", file=sys.stderr)
+                    print(f"[DEBUG] After login click - Title: {current_title}", file=sys.stderr)
+                    print(f"[DEBUG] After login click - Page source starts with: {page_source_snippet[:200]}", file=sys.stderr)
+                except Exception as debug_e:
+                    print(f"[WARNING] Could not get page state for debugging: {debug_e}", file=sys.stderr)
+                
+                # Wait for dashboard or any protected page to load
+                print("[STEP 7.2] Waiting for dashboard to load (5s timeout)...", file=sys.stderr)
                 WebDriverWait(self.driver, 5).until(
                     lambda driver: "Dashboard" in driver.title or "academia" in driver.current_url
                 )
                 
-                print("[OK] Login successful!", file=sys.stderr)
+                # Verify final state
+                final_url = self.driver.current_url
+                final_title = self.driver.title
+                print(f"[OK] Login successful! Final URL: {final_url}, Final Title: {final_title}", file=sys.stderr)
+                
+                # Double-check we're not on login page
+                if "Login" in final_title or "signinFrame" in self.driver.page_source[:1000]:
+                    print("[ERROR] Login appeared successful but we're still on login page!", file=sys.stderr)
+                    print(f"[ERROR] Title: {final_title}, URL: {final_url}", file=sys.stderr)
+                    return False
                 
                 # Save session if enabled
                 if self.use_session:
@@ -411,10 +464,23 @@ class SRMAcademiaScraperSelenium:
                 return True
                 
             except (TimeoutException, WebDriverException) as e:
+                # Detailed error logging
+                try:
+                    error_url = self.driver.current_url
+                    error_title = self.driver.title
+                    error_source_snippet = self.driver.page_source[:1000] if len(self.driver.page_source) > 0 else ""
+                    print(f"[ERROR] Login timeout/error - Current URL: {error_url}", file=sys.stderr)
+                    print(f"[ERROR] Login timeout/error - Current Title: {error_title}", file=sys.stderr)
+                    print(f"[ERROR] Login timeout/error - Page contains 'signinFrame': {'signinFrame' in error_source_snippet}", file=sys.stderr)
+                    print(f"[ERROR] Login timeout/error - Page contains 'Dashboard': {'Dashboard' in error_source_snippet}", file=sys.stderr)
+                    print(f"[ERROR] Login timeout/error - Page source snippet (first 500 chars): {error_source_snippet[:500]}", file=sys.stderr)
+                except Exception as debug_e:
+                    print(f"[ERROR] Could not get error state: {debug_e}", file=sys.stderr)
+                
                 if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
                     print("[ERROR] Browser crashed while waiting for dashboard", file=sys.stderr)
                     return False
-                print("[ERROR] Login failed - timeout waiting for dashboard", file=sys.stderr)
+                print(f"[ERROR] Login failed - timeout waiting for dashboard. Exception: {type(e).__name__}: {str(e)}", file=sys.stderr)
                 return False
                 
         except Exception as e:

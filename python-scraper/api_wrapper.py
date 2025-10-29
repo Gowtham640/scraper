@@ -1465,6 +1465,7 @@ def api_get_all_data(email, password=None, force_refresh=False):
         login_performed = False
         
         # Check if session is valid
+        print(f"[UNIFIED API] Checking session validity...", file=sys.stderr)
         session_valid = scraper.is_session_valid()
         print(f"[UNIFIED API] Session valid: {session_valid}", file=sys.stderr)
         
@@ -1473,11 +1474,14 @@ def api_get_all_data(email, password=None, force_refresh=False):
             # Session exists and is valid → Already logged in from session
             login_performed = False
             print("[UNIFIED API] Valid session found - already logged in", file=sys.stderr)
-        elif password:
+        elif password is not None and password:
             # No valid session → Login with password
-            print("[UNIFIED API] Logging in with provided credentials...", file=sys.stderr)
-            if not scraper.login(email, password):
-                print("[UNIFIED API] Login failed!", file=sys.stderr)
+            print(f"[UNIFIED API] Logging in with provided credentials...", file=sys.stderr)
+            print(f"[UNIFIED API] Email: {email}, Password length: {len(password) if password else 0}", file=sys.stderr)
+            login_result = scraper.login(email, password)
+            print(f"[UNIFIED API] Login method returned: {login_result}", file=sys.stderr)
+            if not login_result:
+                print("[UNIFIED API] Login failed! Check detailed logs above for reason.", file=sys.stderr)
                 return {"success": False, "error": "login_failed", "message": "Invalid credentials"}
             
             # ✅ CRITICAL: We just logged in successfully - trust browser state, no more checks
@@ -1485,7 +1489,8 @@ def api_get_all_data(email, password=None, force_refresh=False):
             print("[UNIFIED API] Login successful - browser is logged in, fetching data directly", file=sys.stderr)
         else:
             # No valid session and no password provided
-            print("[UNIFIED API] No valid session and no password provided", file=sys.stderr)
+            print(f"[UNIFIED API] No valid session and no password provided", file=sys.stderr)
+            print(f"[UNIFIED API] Password value: {password}, Password is None: {password is None}, Password truthy: {bool(password)}", file=sys.stderr)
             return {
                 "success": False,
                 "error": "session_expired",
@@ -1666,6 +1671,7 @@ def api_get_static_data(email, password=None, force_refresh=False):
         login_performed = False
         
         # Check if session is valid
+        print(f"[STATIC DATA API] Checking session validity...", file=sys.stderr)
         session_valid = scraper.is_session_valid()
         print(f"[STATIC DATA API] Session valid: {session_valid}", file=sys.stderr)
         
@@ -1674,11 +1680,14 @@ def api_get_static_data(email, password=None, force_refresh=False):
             # Session exists and is valid → Already logged in from session
             login_performed = False
             print("[STATIC DATA API] Valid session found - already logged in", file=sys.stderr)
-        elif password:
+        elif password is not None and password:
             # No valid session → Login with password
-            print("[STATIC DATA API] Logging in with provided credentials...", file=sys.stderr)
-            if not scraper.login(email, password):
-                print("[STATIC DATA API] Login failed!", file=sys.stderr)
+            print(f"[STATIC DATA API] Logging in with provided credentials...", file=sys.stderr)
+            print(f"[STATIC DATA API] Email: {email}, Password length: {len(password) if password else 0}", file=sys.stderr)
+            login_result = scraper.login(email, password)
+            print(f"[STATIC DATA API] Login method returned: {login_result}", file=sys.stderr)
+            if not login_result:
+                print("[STATIC DATA API] Login failed! Check detailed logs above for reason.", file=sys.stderr)
                 return {"success": False, "error": "login_failed", "message": "Invalid credentials"}
             
             # ✅ CRITICAL: We just logged in successfully - trust browser state, no more checks
@@ -1686,7 +1695,8 @@ def api_get_static_data(email, password=None, force_refresh=False):
             print("[STATIC DATA API] Login successful - browser is logged in, fetching data directly", file=sys.stderr)
         else:
             # No valid session and no password provided
-            print("[STATIC DATA API] No valid session and no password provided", file=sys.stderr)
+            print(f"[STATIC DATA API] No valid session and no password provided", file=sys.stderr)
+            print(f"[STATIC DATA API] Password value: {password}, Password is None: {password is None}, Password truthy: {bool(password)}", file=sys.stderr)
             return {
                 "success": False,
                 "error": "session_expired",
@@ -1816,6 +1826,7 @@ def api_get_dynamic_data(email, password=None):
         login_performed = False
         
         # Check if session is valid
+        print(f"[DYNAMIC DATA API] Checking session validity...", file=sys.stderr)
         session_valid = scraper.is_session_valid()
         print(f"[DYNAMIC DATA API] Session valid: {session_valid}", file=sys.stderr)
         
@@ -1824,11 +1835,14 @@ def api_get_dynamic_data(email, password=None):
             # Session exists and is valid → Already logged in from session
             login_performed = False
             print("[DYNAMIC DATA API] Valid session found - already logged in", file=sys.stderr)
-        elif password:
+        elif password is not None and password:
             # No valid session → Login with password
-            print("[DYNAMIC DATA API] Logging in with provided credentials...", file=sys.stderr)
-            if not scraper.login(email, password):
-                print("[DYNAMIC DATA API] Login failed!", file=sys.stderr)
+            print(f"[DYNAMIC DATA API] Logging in with provided credentials...", file=sys.stderr)
+            print(f"[DYNAMIC DATA API] Email: {email}, Password length: {len(password) if password else 0}", file=sys.stderr)
+            login_result = scraper.login(email, password)
+            print(f"[DYNAMIC DATA API] Login method returned: {login_result}", file=sys.stderr)
+            if not login_result:
+                print("[DYNAMIC DATA API] Login failed! Check detailed logs above for reason.", file=sys.stderr)
                 return {"success": False, "error": "login_failed", "message": "Invalid credentials"}
             
             # ✅ CRITICAL: We just logged in successfully - trust browser state, no more checks
@@ -1836,7 +1850,8 @@ def api_get_dynamic_data(email, password=None):
             print("[DYNAMIC DATA API] Login successful - browser is logged in, fetching data directly", file=sys.stderr)
         else:
             # No valid session and no password provided
-            print("[DYNAMIC DATA API] No valid session and no password provided", file=sys.stderr)
+            print(f"[DYNAMIC DATA API] No valid session and no password provided", file=sys.stderr)
+            print(f"[DYNAMIC DATA API] Password value: {password}, Password is None: {password is None}, Password truthy: {bool(password)}", file=sys.stderr)
             return {
                 "success": False,
                 "error": "session_expired",
