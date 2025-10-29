@@ -169,16 +169,24 @@ class SRMAcademiaScraperSelenium:
             # Actually test the session by trying to access a protected page
             try:
                 print("[SESSION] Testing session validity...", file=sys.stderr)
-                self.driver.get("https://academia.srmist.edu.in/#Page:Dashboard")
+                # ✅ FIX: Use a valid page that actually exists (Dashboard doesn't exist)
+                # Use Attendance page as it's a valid protected page
+                self.driver.get("https://academia.srmist.edu.in/#Page:My_Attendance")
                 time.sleep(1)  # Optimized - reduced from 3s to 1s
                 
                 # Check if we're redirected to login page
-                if "Login" in self.driver.title or "signinFrame" in self.driver.page_source:
+                if "Login" in self.driver.title or "signinFrame" in self.driver.page_source[:1000]:
                     print("[SESSION] Session invalid - redirected to login page", file=sys.stderr)
                     return False
                 else:
-                    print("[SESSION] Session valid - can access protected pages", file=sys.stderr)
-                    return True
+                    # Additional check: verify we're on a valid internal page
+                    current_url = self.driver.current_url
+                    if "#Page:" in current_url:
+                        print("[SESSION] Session valid - can access protected pages", file=sys.stderr)
+                        return True
+                    else:
+                        print("[SESSION] Session invalid - not on a valid portal page", file=sys.stderr)
+                        return False
                     
             except Exception as e:
                 print(f"[SESSION] Error testing session: {e}", file=sys.stderr)
@@ -213,9 +221,9 @@ class SRMAcademiaScraperSelenium:
             current_url = self.driver.current_url
             title = self.driver.title
             
-            # Check if we're on dashboard/welcome or any internal page
-            if "WELCOME" in title or "Dashboard" in title:
-                print("[BROWSER STATE] Already logged in - on WELCOME/Dashboard page", file=sys.stderr)
+            # Check if we're on welcome or any internal page
+            if "WELCOME" in title:
+                print("[BROWSER STATE] Already logged in - on WELCOME page", file=sys.stderr)
                 return True
             
             # Check if URL shows we're inside the portal (any internal page)
@@ -469,29 +477,34 @@ class SRMAcademiaScraperSelenium:
                 print(f"[LOGIN VERIFY] Contains 'signinFrame' in source: {'signinFrame' in page_source_sample}", file=sys.stderr)
                 
                 # ✅ CRITICAL: Must NOT be on login page
-                if "Login" in current_title and "Dashboard" not in current_title:
+                if "Login" in current_title:
                     print("[ERROR] Login failed - still on login page", file=sys.stderr)
-                    # Try one more navigation to Dashboard as fallback verification
-                    print("[RETRY] Attempting Dashboard navigation for final verification...", file=sys.stderr)
-                    dashboard_url = "https://academia.srmist.edu.in/#Page:Dashboard"
-                    self.driver.get(dashboard_url)
+                    # ✅ FIX: Instead of Dashboard (which doesn't exist), verify by checking if we can access any valid page
+                    # Try accessing a known valid page as fallback verification
+                    print("[RETRY] Attempting to verify login by accessing Attendance page...", file=sys.stderr)
+                    attendance_url = "https://academia.srmist.edu.in/#Page:My_Attendance"
+                    self.driver.get(attendance_url)
                     time.sleep(2)
                     final_url = self.driver.current_url
                     final_title = self.driver.title
                     final_source_check = self.driver.page_source[:1000] if len(self.driver.page_source) > 0 else ""
                     
-                    print(f"[LOGIN VERIFY] After Dashboard navigation - URL: {final_url}", file=sys.stderr)
-                    print(f"[LOGIN VERIFY] After Dashboard navigation - Title: {final_title}", file=sys.stderr)
+                    print(f"[LOGIN VERIFY] After Attendance page navigation - URL: {final_url}", file=sys.stderr)
+                    print(f"[LOGIN VERIFY] After Attendance page navigation - Title: {final_title}", file=sys.stderr)
                     
-                    if "Login" in final_title and "Dashboard" not in final_title:
-                        print("[ERROR] Login failed - redirected to login page", file=sys.stderr)
+                    # Check if we're still on login page or redirected to login
+                    if "Login" in final_title or "signinFrame" in final_source_check:
+                        print("[ERROR] Login failed - redirected to login page when accessing protected page", file=sys.stderr)
                         print(f"[ERROR] Title: {final_title}, URL: {final_url}", file=sys.stderr)
                         return False
                     
-                    if "signinFrame" in final_source_check:
-                        print("[ERROR] Login failed - login frame present on Dashboard page", file=sys.stderr)
+                    # Verify we're actually on a valid portal page
+                    if "#Page:" not in final_url:
+                        print("[ERROR] Login failed - not on a valid portal page", file=sys.stderr)
                         print(f"[ERROR] Title: {final_title}, URL: {final_url}", file=sys.stderr)
                         return False
+                    
+                    print("[OK] Login verified - successfully accessed protected page", file=sys.stderr)
                 
                 if "signinFrame" in page_source_sample:
                     print("[ERROR] Login failed - login frame still present", file=sys.stderr)
