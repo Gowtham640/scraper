@@ -1072,16 +1072,16 @@ def api_get_marks_data(email, password):
                 print(f"[API] Error closing scraper: {e}", file=sys.stderr)
 
 
-def get_calendar_data_with_scraper(scraper, email, password, force_refresh=False, skip_login_check=False):
+def get_calendar_data_with_scraper(scraper, email, password, force_refresh=False, trust_logged_in=False):
     """
     Get calendar data using existing scraper instance
     
     Args:
         scraper: Selenium scraper instance
         email: User email
-        password: User password (optional if skip_login_check=True)
+        password: User password (optional if trust_logged_in=True)
         force_refresh: Force refresh cached data
-        skip_login_check: If True, skip is_logged_in() check and assume already logged in
+        trust_logged_in: If True, we just logged in - trust browser state, fetch directly (NO CHECKS)
     """
     try:
         print(f"[UNIFIED API] Getting calendar data for: {email}", file=sys.stderr)
@@ -1103,12 +1103,12 @@ def get_calendar_data_with_scraper(scraper, email, password, force_refresh=False
         print("[UNIFIED API] Cache expired or empty - fetching fresh calendar data", file=sys.stderr)
 
         html_content = None
-        # Optimize: Skip login check if we know session is valid (Phase 2 optimization)
-        if skip_login_check:
-            print("[UNIFIED API] Phase 2 optimized: Skipping login check, assuming already logged in", file=sys.stderr)
-            html_content = scraper.get_calendar_data()
+        # ✅ OPTIMIZED: If we trust login (just logged in), fetch directly - NO CHECKS, NO VERIFICATION
+        if trust_logged_in:
+            print("[OPTIMIZED] Trusting login state - fetching calendar directly (no checks)", file=sys.stderr)
+            html_content = scraper.get_calendar_data()  # Direct fetch - trust browser is logged in
         else:
-            # Check if browser is already logged in (real-time state check)
+            # Backward compatibility: Check login only if we didn't login at top level
             if scraper.is_logged_in():
                 print("[UNIFIED API] Browser already logged in - fetching calendar data directly", file=sys.stderr)
                 html_content = scraper.get_calendar_data()
@@ -1175,31 +1175,29 @@ def get_calendar_data_with_scraper(scraper, email, password, force_refresh=False
         return {"success": False, "error": f"API Error: {str(e)}"}
 
 
-def get_attendance_and_marks_data_with_scraper(scraper, email, password, skip_login_check=False):
+def get_attendance_and_marks_data_with_scraper(scraper, email, password, trust_logged_in=False):
     """
     Get both attendance and marks data from the same page (using individual function logic)
     
     Args:
         scraper: Selenium scraper instance
         email: User email
-        password: User password (optional if skip_login_check=True)
-        skip_login_check: If True, skip is_logged_in() check and assume already logged in
+        password: User password (optional if trust_logged_in=True)
+        trust_logged_in: If True, we just logged in - trust browser state, fetch directly (NO CHECKS)
     """
     try:
         print(f"[UNIFIED API] Getting attendance and marks data for: {email}", file=sys.stderr)
         
-        # Use the EXACT same logic as individual functions - fetch page once, extract both
+        # ✅ OPTIMIZED: If we trust login (just logged in), fetch directly - NO CHECKS, NO VERIFICATION
         html_content = None
-        # Optimize: Skip login check if we know session is valid (Phase 2 optimization)
-        if skip_login_check:
-            print("[UNIFIED API] Phase 2 optimized: Skipping login check, assuming already logged in", file=sys.stderr)
-            # Use get_marks_page_html for proper validation (same as individual function)
+        if trust_logged_in:
+            print("[OPTIMIZED] Trusting login state - fetching attendance/marks directly (no checks)", file=sys.stderr)
+            # Direct fetch - trust browser is logged in
             html_content = get_marks_page_html(scraper)
         else:
-            # Check if browser is already logged in (real-time state check)
+            # Backward compatibility: Check login only if we didn't login at top level
             if scraper.is_logged_in():
                 print("[UNIFIED API] Browser already logged in - fetching attendance/marks data directly", file=sys.stderr)
-                # Use get_marks_page_html for proper validation (same as individual function)
                 html_content = get_marks_page_html(scraper)
             else:
                 # Browser not logged in - need to login first
@@ -1211,7 +1209,6 @@ def get_attendance_and_marks_data_with_scraper(scraper, email, password, skip_lo
                         "marks": {"success": False, "error": "Login failed"}
                     }
                 print("[UNIFIED API] Login successful!", file=sys.stderr)
-                # Use get_marks_page_html for proper validation (same as individual function)
                 html_content = get_marks_page_html(scraper)
 
         if not html_content:
@@ -1318,26 +1315,26 @@ def get_attendance_and_marks_data_with_scraper(scraper, email, password, skip_lo
         }
 
 
-def get_timetable_data_with_scraper(scraper, email, password, skip_login_check=False):
+def get_timetable_data_with_scraper(scraper, email, password, trust_logged_in=False):
     """
     Get timetable data using existing scraper instance
     
     Args:
         scraper: Selenium scraper instance
         email: User email
-        password: User password (optional if skip_login_check=True)
-        skip_login_check: If True, skip is_logged_in() check and assume already logged in
+        password: User password (optional if trust_logged_in=True)
+        trust_logged_in: If True, we just logged in - trust browser state, fetch directly (NO CHECKS)
     """
     try:
         print(f"[UNIFIED API] Getting timetable data for: {email}", file=sys.stderr)
         
         html_content = None
-        # Optimize: Skip login check if we know session is valid (Phase 2 optimization)
-        if skip_login_check:
-            print("[UNIFIED API] Phase 2 optimized: Skipping login check, assuming already logged in", file=sys.stderr)
-            html_content = get_timetable_page_html(scraper)
+        # ✅ OPTIMIZED: If we trust login (just logged in), fetch directly - NO CHECKS, NO VERIFICATION
+        if trust_logged_in:
+            print("[OPTIMIZED] Trusting login state - fetching timetable directly (no checks)", file=sys.stderr)
+            html_content = get_timetable_page_html(scraper)  # Direct fetch - trust browser is logged in
         else:
-            # Check if browser is already logged in (real-time state check)
+            # Backward compatibility: Check login only if we didn't login at top level
             if scraper.is_logged_in():
                 print("[UNIFIED API] Browser already logged in - fetching timetable data directly", file=sys.stderr)
                 html_content = get_timetable_page_html(scraper)
@@ -1464,21 +1461,28 @@ def api_get_all_data(email, password=None, force_refresh=False):
         successful_data_types = 0
         total_data_types = 4  # calendar, attendance, marks, timetable
         
+        # ✅ OPTIMIZATION: Track if we just logged in - if so, trust browser state completely
+        login_performed = False
+        
         # Check if session is valid
         session_valid = scraper.is_session_valid()
         print(f"[UNIFIED API] Session valid: {session_valid}", file=sys.stderr)
         
         # SMART SESSION LOGIC: Check session validity FIRST, then login if needed
         if session_valid:
-            # Session exists and is valid → Skip login
-            print("[UNIFIED API] Valid session found - skipping login", file=sys.stderr)
+            # Session exists and is valid → Already logged in from session
+            login_performed = False
+            print("[UNIFIED API] Valid session found - already logged in", file=sys.stderr)
         elif password:
             # No valid session → Login with password
-            print("[UNIFIED API] No valid session - attempting login with provided password", file=sys.stderr)
+            print("[UNIFIED API] Logging in with provided credentials...", file=sys.stderr)
             if not scraper.login(email, password):
                 print("[UNIFIED API] Login failed!", file=sys.stderr)
                 return {"success": False, "error": "login_failed", "message": "Invalid credentials"}
-            print("[UNIFIED API] Login successful!", file=sys.stderr)
+            
+            # ✅ CRITICAL: We just logged in successfully - trust browser state, no more checks
+            login_performed = True
+            print("[UNIFIED API] Login successful - browser is logged in, fetching data directly", file=sys.stderr)
         else:
             # No valid session and no password provided
             print("[UNIFIED API] No valid session and no password provided", file=sys.stderr)
@@ -1488,10 +1492,10 @@ def api_get_all_data(email, password=None, force_refresh=False):
                 "message": "Session expired. Please re-authenticate with your password."
             }
         
-        # Fetch calendar data first
-        print(f"[UNIFIED API] Fetching calendar data...", file=sys.stderr)
+        # ✅ OPTIMIZED: After login, we KNOW browser is logged in - fetch directly, NO CHECKS
+        print(f"[UNIFIED API] Fetching calendar data (trust_logged_in={login_performed})...", file=sys.stderr)
         try:
-            calendar_result = get_calendar_data_with_scraper(scraper, email, password, force_refresh)
+            calendar_result = get_calendar_data_with_scraper(scraper, email, password, force_refresh, trust_logged_in=login_performed)
             results['calendar'] = calendar_result
             
             if calendar_result.get('success', False):
@@ -1509,10 +1513,10 @@ def api_get_all_data(email, password=None, force_refresh=False):
                 "count": 0
             }
         
-        # Fetch attendance and marks data together (optimized - single page fetch)
-        print(f"[UNIFIED API] Fetching attendance and marks data together...", file=sys.stderr)
+        # ✅ OPTIMIZED: After login, we KNOW browser is logged in - fetch directly, NO CHECKS
+        print(f"[UNIFIED API] Fetching attendance and marks data together (trust_logged_in={login_performed})...", file=sys.stderr)
         try:
-            combined_result = get_attendance_and_marks_data_with_scraper(scraper, email, password)
+            combined_result = get_attendance_and_marks_data_with_scraper(scraper, email, password, trust_logged_in=login_performed)
             results['attendance'] = combined_result['attendance']
             results['marks'] = combined_result['marks']
             
@@ -1544,10 +1548,10 @@ def api_get_all_data(email, password=None, force_refresh=False):
                 "count": 0
             }
         
-        # Fetch timetable data
-        print(f"[UNIFIED API] Fetching timetable data...", file=sys.stderr)
+        # ✅ OPTIMIZED: After login, we KNOW browser is logged in - fetch directly, NO CHECKS
+        print(f"[UNIFIED API] Fetching timetable data (trust_logged_in={login_performed})...", file=sys.stderr)
         try:
-            timetable_result = get_timetable_data_with_scraper(scraper, email, password)
+            timetable_result = get_timetable_data_with_scraper(scraper, email, password, trust_logged_in=login_performed)
             results['timetable'] = timetable_result
             
             if timetable_result.get('success', False):
@@ -1658,21 +1662,28 @@ def api_get_static_data(email, password=None, force_refresh=False):
         successful_data_types = 0
         total_data_types = 2  # calendar, timetable
         
+        # ✅ OPTIMIZATION: Track if we just logged in - if so, trust browser state completely
+        login_performed = False
+        
         # Check if session is valid
         session_valid = scraper.is_session_valid()
         print(f"[STATIC DATA API] Session valid: {session_valid}", file=sys.stderr)
         
         # SMART SESSION LOGIC: Check session validity FIRST, then login if needed
         if session_valid:
-            # Session exists and is valid → Skip login
-            print("[STATIC DATA API] Valid session found - skipping login", file=sys.stderr)
+            # Session exists and is valid → Already logged in from session
+            login_performed = False
+            print("[STATIC DATA API] Valid session found - already logged in", file=sys.stderr)
         elif password:
             # No valid session → Login with password
-            print("[STATIC DATA API] No valid session - attempting login with provided password", file=sys.stderr)
+            print("[STATIC DATA API] Logging in with provided credentials...", file=sys.stderr)
             if not scraper.login(email, password):
                 print("[STATIC DATA API] Login failed!", file=sys.stderr)
                 return {"success": False, "error": "login_failed", "message": "Invalid credentials"}
-            print("[STATIC DATA API] Login successful!", file=sys.stderr)
+            
+            # ✅ CRITICAL: We just logged in successfully - trust browser state, no more checks
+            login_performed = True
+            print("[STATIC DATA API] Login successful - browser is logged in, fetching data directly", file=sys.stderr)
         else:
             # No valid session and no password provided
             print("[STATIC DATA API] No valid session and no password provided", file=sys.stderr)
@@ -1682,11 +1693,10 @@ def api_get_static_data(email, password=None, force_refresh=False):
                 "message": "Session expired. Please re-authenticate with your password."
             }
         
-        # Fetch calendar data
-        # Phase 2 optimization: Skip login check since we've already validated/established session
-        print(f"[STATIC DATA API] Fetching calendar data...", file=sys.stderr)
+        # ✅ OPTIMIZED: After login, we KNOW browser is logged in - fetch directly, NO CHECKS
+        print(f"[STATIC DATA API] Fetching calendar data (trust_logged_in={login_performed})...", file=sys.stderr)
         try:
-            calendar_result = get_calendar_data_with_scraper(scraper, email, password, force_refresh, skip_login_check=True)
+            calendar_result = get_calendar_data_with_scraper(scraper, email, password, force_refresh, trust_logged_in=login_performed)
             results['calendar'] = calendar_result
             
             if calendar_result.get('success', False):
@@ -1704,11 +1714,10 @@ def api_get_static_data(email, password=None, force_refresh=False):
                 "count": 0
             }
         
-        # Fetch timetable data
-        # Phase 2 optimization: Skip login check since we've already validated/established session
-        print(f"[STATIC DATA API] Fetching timetable data...", file=sys.stderr)
+        # ✅ OPTIMIZED: After login, we KNOW browser is logged in - fetch directly, NO CHECKS
+        print(f"[STATIC DATA API] Fetching timetable data (trust_logged_in={login_performed})...", file=sys.stderr)
         try:
-            timetable_result = get_timetable_data_with_scraper(scraper, email, password, skip_login_check=True)
+            timetable_result = get_timetable_data_with_scraper(scraper, email, password, trust_logged_in=login_performed)
             results['timetable'] = timetable_result
             
             if timetable_result.get('success', False):
@@ -1803,21 +1812,28 @@ def api_get_dynamic_data(email, password=None):
         # Initialize single scraper instance with per-user session
         scraper = SRMAcademiaScraperSelenium(headless=True, use_session=True, user_email=email)
         
+        # ✅ OPTIMIZATION: Track if we just logged in - if so, trust browser state completely
+        login_performed = False
+        
         # Check if session is valid
         session_valid = scraper.is_session_valid()
         print(f"[DYNAMIC DATA API] Session valid: {session_valid}", file=sys.stderr)
         
         # SMART SESSION LOGIC: Check session validity FIRST, then login if needed
         if session_valid:
-            # Session exists and is valid → Skip login
-            print("[DYNAMIC DATA API] Valid session found - skipping login", file=sys.stderr)
+            # Session exists and is valid → Already logged in from session
+            login_performed = False
+            print("[DYNAMIC DATA API] Valid session found - already logged in", file=sys.stderr)
         elif password:
             # No valid session → Login with password
-            print("[DYNAMIC DATA API] No valid session - attempting login with provided password", file=sys.stderr)
+            print("[DYNAMIC DATA API] Logging in with provided credentials...", file=sys.stderr)
             if not scraper.login(email, password):
                 print("[DYNAMIC DATA API] Login failed!", file=sys.stderr)
                 return {"success": False, "error": "login_failed", "message": "Invalid credentials"}
-            print("[DYNAMIC DATA API] Login successful!", file=sys.stderr)
+            
+            # ✅ CRITICAL: We just logged in successfully - trust browser state, no more checks
+            login_performed = True
+            print("[DYNAMIC DATA API] Login successful - browser is logged in, fetching data directly", file=sys.stderr)
         else:
             # No valid session and no password provided
             print("[DYNAMIC DATA API] No valid session and no password provided", file=sys.stderr)
@@ -1827,11 +1843,10 @@ def api_get_dynamic_data(email, password=None):
                 "message": "Session expired. Please re-authenticate with your password."
             }
         
-        # Fetch attendance and marks data together (optimized - single page fetch)
-        # Phase 2 optimization: Skip login check since we've already validated/established session
-        print(f"[DYNAMIC DATA API] Fetching attendance and marks data together...", file=sys.stderr)
+        # ✅ OPTIMIZED: After login, we KNOW browser is logged in - fetch directly, NO CHECKS
+        print(f"[DYNAMIC DATA API] Fetching attendance and marks data together (trust_logged_in={login_performed})...", file=sys.stderr)
         try:
-            combined_result = get_attendance_and_marks_data_with_scraper(scraper, email, password, skip_login_check=True)
+            combined_result = get_attendance_and_marks_data_with_scraper(scraper, email, password, trust_logged_in=login_performed)
             attendance_result = combined_result['attendance']
             marks_result = combined_result['marks']
             
