@@ -21,31 +21,56 @@ def extract_calendar_data_from_html(html_content):
     calendar_data = []
     
     try:
+        print("[EXTRACT DEBUG] === CALENDAR EXTRACTION STARTED ===", file=sys.stderr)
+        print(f"[EXTRACT DEBUG] HTML content length: {len(html_content)} characters", file=sys.stderr)
+        
         soup = BeautifulSoup(html_content, 'html.parser')
         
         # Find the main calendar table
         tables = soup.find_all('table')
+        print(f"[EXTRACT DEBUG] BeautifulSoup found {len(tables)} tables", file=sys.stderr)
         
         if not tables:
-            print("No tables found in HTML content", file=sys.stderr)
+            print("[EXTRACT DEBUG] ✗ No tables found in HTML content", file=sys.stderr)
+            print("[EXTRACT DEBUG] === CALENDAR EXTRACTION FAILED - NO TABLES ===", file=sys.stderr)
             return calendar_data
         
         # Find the table with calendar data (should contain month headers)
         calendar_table = None
-        for table in tables:
+        print(f"[EXTRACT DEBUG] Checking {len(tables)} tables for calendar content...", file=sys.stderr)
+        
+        for idx, table in enumerate(tables):
             table_text = table.get_text()
+            print(f"[EXTRACT DEBUG] Table {idx+1}: Text length = {len(table_text)} chars", file=sys.stderr)
+            print(f"[EXTRACT DEBUG] Table {idx+1}: Contains 'Jul': {'Jul' in table_text}, 'Aug': {'Aug' in table_text}", file=sys.stderr)
+            
             if "Jul '25" in table_text and "Aug '25" in table_text:
+                print(f"[EXTRACT DEBUG] ✓ Found calendar table at index {idx+1}", file=sys.stderr)
                 calendar_table = table
                 break
+            elif "Jul" in table_text or "Aug" in table_text:
+                print(f"[EXTRACT DEBUG] Table {idx+1}: Contains month names but not exact match", file=sys.stderr)
         
         if not calendar_table:
-            print("Calendar table not found", file=sys.stderr)
+            print("[EXTRACT DEBUG] ✗ Calendar table not found (no table contains both 'Jul \\'25' and 'Aug \\'25')", file=sys.stderr)
+            # Debug: Show what month names we did find
+            for idx, table in enumerate(tables):
+                table_text = table.get_text()
+                months_found = []
+                for month in ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']:
+                    if month in table_text:
+                        months_found.append(month)
+                if months_found:
+                    print(f"[EXTRACT DEBUG] Table {idx+1} contains months: {months_found}", file=sys.stderr)
+            print("[EXTRACT DEBUG] === CALENDAR EXTRACTION FAILED - NO CALENDAR TABLE ===", file=sys.stderr)
             return calendar_data
         
         rows = calendar_table.find_all('tr')
+        print(f"[EXTRACT DEBUG] Calendar table has {len(rows)} rows", file=sys.stderr)
         
         if not rows:
-            print("No rows found in calendar table", file=sys.stderr)
+            print("[EXTRACT DEBUG] ✗ No rows found in calendar table", file=sys.stderr)
+            print("[EXTRACT DEBUG] === CALENDAR EXTRACTION FAILED - NO ROWS ===", file=sys.stderr)
             return calendar_data
         
         # Find the header row to identify month positions
@@ -88,8 +113,9 @@ def extract_calendar_data_from_html(html_content):
                         'year': year
                     }
         
-        print(f"Found months: {list(month_positions.keys())}", file=sys.stderr)
-        print(f"Month positions: {month_positions}", file=sys.stderr)
+        print(f"[EXTRACT DEBUG] Found months: {list(month_positions.keys())}", file=sys.stderr)
+        print(f"[EXTRACT DEBUG] Month positions: {month_positions}", file=sys.stderr)
+        print(f"[EXTRACT DEBUG] Processing {len(rows)-1} data rows (excluding header)...", file=sys.stderr)
         
         # Process data rows (skip the header row)
         for row_idx, row in enumerate(rows[1:], 1):  # Skip header row
@@ -146,12 +172,19 @@ def extract_calendar_data_from_html(html_content):
                         
                         calendar_data.append(calendar_entry)
         
-        print(f"Extracted {len(calendar_data)} calendar entries", file=sys.stderr)
+        print(f"[EXTRACT DEBUG] ✓ Successfully extracted {len(calendar_data)} calendar entries", file=sys.stderr)
+        
+        if len(calendar_data) == 0:
+            print("[EXTRACT DEBUG] WARNING: No calendar entries extracted despite finding calendar table", file=sys.stderr)
+            print("[EXTRACT DEBUG] This might indicate the table structure is different than expected", file=sys.stderr)
+        
+        print("[EXTRACT DEBUG] === CALENDAR EXTRACTION COMPLETE ===", file=sys.stderr)
     
     except Exception as e:
-        print(f"Error extracting calendar data: {e}", file=sys.stderr)
+        print(f"[EXTRACT DEBUG] ✗ ERROR extracting calendar data: {e}", file=sys.stderr)
         import traceback
-        traceback.print_exc()
+        traceback.print_exc(file=sys.stderr)
+        print("[EXTRACT DEBUG] === CALENDAR EXTRACTION FAILED WITH EXCEPTION ===", file=sys.stderr)
     
     return calendar_data
 

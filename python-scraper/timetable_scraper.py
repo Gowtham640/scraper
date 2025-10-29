@@ -40,51 +40,94 @@ def get_timetable_page_html(scraper):
         
         print("[OK] Not on login page, proceeding with timetable extraction", file=sys.stderr)
         
-        # ✅ CRITICAL: Wait for dynamic content to load!
-        print("[STEP 3] Waiting for dynamic content to load...", file=sys.stderr)
+        # ✅ CRITICAL: Wait for timetable table WITH ROWS (not just table presence)
+        print("[STEP 3] Waiting for timetable table with rows to load...", file=sys.stderr)
         
         # Wait for the page to be fully loaded (including JS execution)
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.webdriver.support import expected_conditions as EC
         from selenium.webdriver.common.by import By
+        from selenium.common.exceptions import TimeoutException
         
-        # ✅ PHASE 2 FIX: Reduced wait time from 5s to 2s per selector (saves ~12s)
-        # Wait up to 2 seconds for timetable table to appear
-        # Try multiple selectors to catch different table structures
-        table_found = False
-        selectors = [
-            (By.CLASS_NAME, 'course_tbl'),
-            (By.TAG_NAME, 'table'),
-            (By.CSS_SELECTOR, 'table[class*="course"]'),
-            (By.CSS_SELECTOR, 'table[class*="timetable"]'),
-        ]
-        
-        for by, selector in selectors:
+        def timetable_table_has_rows(driver):
+            """Custom condition: Check if table exists AND has rows with course data"""
             try:
-                print(f"[DEBUG] Waiting for table with selector: {selector} (max 2s)", file=sys.stderr)
-                WebDriverWait(scraper.driver, 2).until(  # Reduced from 5s to 2s
-                    EC.presence_of_element_located((by, selector))
-                )
-                print(f"[OK] Table found with selector: {selector}", file=sys.stderr)
-                table_found = True
-                break
-            except:
-                print(f"[DEBUG] No table found with selector: {selector} (timed out after 2s)", file=sys.stderr)
-                continue
+                # Try multiple selectors
+                selectors = [
+                    (By.CLASS_NAME, 'course_tbl'),
+                    (By.TAG_NAME, 'table'),
+                    (By.CSS_SELECTOR, 'table[class*="course"]'),
+                    (By.CSS_SELECTOR, 'table[class*="timetable"]'),
+                ]
+                
+                for by, selector in selectors:
+                    try:
+                        tables = driver.find_elements(by, selector)
+                        if len(tables) == 0:
+                            continue
+                        
+                        print(f"[DEBUG] Found {len(tables)} tables with selector: {selector}", file=sys.stderr)
+                        
+                        # Check if any table has rows
+                        for idx, table in enumerate(tables):
+                            rows = table.find_elements(By.TAG_NAME, 'tr')
+                            print(f"[DEBUG] Table {idx+1} (selector: {selector}): Found {len(rows)} rows", file=sys.stderr)
+                            
+                            if len(rows) > 0:
+                                # Check if rows have cells with content
+                                cells_with_content = 0
+                                for row in rows[:5]:  # Check first 5 rows
+                                    cells = row.find_elements(By.TAG_NAME, 'td') + row.find_elements(By.TAG_NAME, 'th')
+                                    for cell in cells:
+                                        if cell.text.strip():
+                                            cells_with_content += 1
+                                
+                                print(f"[DEBUG] Table {idx+1}: First 5 rows have {cells_with_content} non-empty cells", file=sys.stderr)
+                                
+                                if cells_with_content > 0:
+                                    print(f"[OK] Timetable table {idx+1} has {len(rows)} rows with {cells_with_content} cells containing data", file=sys.stderr)
+                                    return True
+                    except Exception as e:
+                        print(f"[DEBUG] Error checking selector {selector}: {e}", file=sys.stderr)
+                        continue
+                
+                return False
+            except Exception as e:
+                print(f"[DEBUG] Error in timetable_table_has_rows check: {e}", file=sys.stderr)
+                return False
         
-        # ✅ PHASE 2 FIX: Re-check for login page before final wait
-        if not table_found:
-            # Double-check we're not on login page
+        table_with_rows_found = False
+        try:
+            print("[DEBUG] Waiting up to 15 seconds for timetable table with rows...", file=sys.stderr)
+            WebDriverWait(scraper.driver, 15).until(timetable_table_has_rows)
+            table_with_rows_found = True
+            print("[OK] Timetable table with rows found!", file=sys.stderr)
+        except TimeoutException:
+            print("[WARN] Timeout waiting for table with rows after 15s", file=sys.stderr)
+            # Debug: Check what we actually have
+            try:
+                tables = scraper.driver.find_elements(By.TAG_NAME, 'table')
+                print(f"[DEBUG] After timeout: Found {len(tables)} tables", file=sys.stderr)
+                for idx, table in enumerate(tables):
+                    rows = table.find_elements(By.TAG_NAME, 'tr')
+                    print(f"[DEBUG] Table {idx+1} has {len(rows)} rows", file=sys.stderr)
+                    if len(rows) > 0:
+                        row_text_sample = rows[0].text[:100]
+                        print(f"[DEBUG] Table {idx+1} first row text sample: {row_text_sample}", file=sys.stderr)
+            except Exception as e:
+                print(f"[DEBUG] Error inspecting tables after timeout: {e}", file=sys.stderr)
+        
+        # ✅ CRITICAL: Re-check for login page before final wait
+        if not table_with_rows_found:
             if "Login" in scraper.driver.title or "signinFrame" in scraper.driver.page_source[:500]:
                 print("[ERROR] Login page detected after wait - session expired during navigation", file=sys.stderr)
                 return None
-            
-            print("[WARN] No table found with any selector, continuing anyway...", file=sys.stderr)
+            print("[WARN] Table with rows not found, but continuing...", file=sys.stderr)
         
-        # ✅ PHASE 2 FIX: Reduced JS rendering wait from 2s to 1s
-        # Extra wait for JavaScript rendering
-        time.sleep(1)  # Reduced from 2s to 1s
-        print("[OK] Waited for JS rendering", file=sys.stderr)
+        # ✅ CRITICAL: Extra wait for JavaScript rendering (timetable needs time to fully render)
+        print("[STEP 4] Waiting for JavaScript to fully render timetable content...", file=sys.stderr)
+        time.sleep(3)  # Give additional time for full timetable rendering
+        print("[OK] Finished waiting for JS rendering", file=sys.stderr)
         
         # Final login page check before returning
         final_title = scraper.driver.title
@@ -100,13 +143,47 @@ def get_timetable_page_html(scraper):
         page_source = scraper.driver.page_source
         print(f"[OK] Page source length: {len(page_source)} characters", file=sys.stderr)
         
+        # ✅ COMPREHENSIVE DEBUG: Check HTML structure before returning
+        print("[DEBUG] === TIMETABLE HTML STRUCTURE ANALYSIS ===", file=sys.stderr)
+        print(f"[DEBUG] Total HTML length: {len(page_source)} characters", file=sys.stderr)
+        
+        # Count tables in HTML
+        table_count = page_source.lower().count('<table')
+        print(f"[DEBUG] Number of '<table' tags found: {table_count}", file=sys.stderr)
+        
+        # Count rows in HTML
+        tr_count = page_source.lower().count('<tr')
+        print(f"[DEBUG] Number of '<tr' tags found: {tr_count}", file=sys.stderr)
+        
+        # Count cells in HTML
+        td_count = page_source.lower().count('<td')
+        th_count = page_source.lower().count('<th')
+        print(f"[DEBUG] Number of '<td' tags: {td_count}, '<th' tags: {th_count}", file=sys.stderr)
+        
+        # Check for expected timetable markers
+        has_course = 'course' in page_source.lower()
+        has_time = 'time' in page_source.lower() or 'slot' in page_source.lower()
+        has_batch = 'batch' in page_source.lower()
+        print(f"[DEBUG] Contains 'course': {has_course}, 'time/slot': {has_time}, 'batch': {has_batch}", file=sys.stderr)
+        
+        # Sample HTML structure (first 500 chars)
+        print(f"[DEBUG] First 500 characters of HTML: {page_source[:500]}", file=sys.stderr)
+        
+        # Sample table structure if found
+        if '<table' in page_source.lower():
+            table_start = page_source.lower().find('<table')
+            table_sample = page_source[table_start:table_start+1000]
+            print(f"[DEBUG] Sample table HTML (first 1000 chars): {table_sample}", file=sys.stderr)
+        
         # Final validation - check if page source is too small (likely login page)
         if len(page_source) < 10000:  # Real timetable pages should be much larger
             print(f"[WARN] Page source is very small ({len(page_source)} chars) - might be login page", file=sys.stderr)
             if "Login" in page_source or "signinFrame" in page_source:
                 print("[ERROR] Confirmed: This is a login page, not timetable", file=sys.stderr)
+                print("[DEBUG] === TIMETABLE HTML STRUCTURE ANALYSIS COMPLETE ===", file=sys.stderr)
                 return None
         
+        print("[DEBUG] === TIMETABLE HTML STRUCTURE ANALYSIS COMPLETE ===", file=sys.stderr)
         return page_source
         
     except Exception as e:
@@ -184,14 +261,23 @@ def extract_timetable_data_from_html(html_content):
     batch_number = None
     
     try:
+        print("[EXTRACT DEBUG] === TIMETABLE EXTRACTION STARTED ===", file=sys.stderr)
+        print(f"[EXTRACT DEBUG] HTML content length: {len(html_content)} characters", file=sys.stderr)
+        
         soup = BeautifulSoup(html_content, 'html.parser')
         
         # First, try to extract batch number
         batch_number = extract_batch_number_from_html(html_content)
+        print(f"[EXTRACT DEBUG] Batch number extracted: {batch_number}", file=sys.stderr)
         
         # Find ALL tables and debug what we have
         tables = soup.find_all('table')
-        print(f"[TIMETABLE] Found {len(tables)} tables on the page", file=sys.stderr)
+        print(f"[EXTRACT DEBUG] BeautifulSoup found {len(tables)} tables", file=sys.stderr)
+        
+        if not tables:
+            print("[EXTRACT DEBUG] ✗ No tables found in HTML content", file=sys.stderr)
+            print("[EXTRACT DEBUG] === TIMETABLE EXTRACTION FAILED - NO TABLES ===", file=sys.stderr)
+            return [], None
         
         # Debug each table to see what we're working with
         for i, table in enumerate(tables):
@@ -244,21 +330,31 @@ def extract_timetable_data_from_html(html_content):
         
         # Extract courses from the found table
         if course_table:
-            print("[TIMETABLE] Extracting courses from found table", file=sys.stderr)
+            print("[EXTRACT DEBUG] ✓ Found course table, extracting courses...", file=sys.stderr)
             courses = extract_from_table(course_table)
+            print(f"[EXTRACT DEBUG] Extracted {len(courses)} courses from course table", file=sys.stderr)
         else:
-            print("[TIMETABLE] No suitable course table found", file=sys.stderr)
+            print("[EXTRACT DEBUG] ✗ No suitable course table found with any approach", file=sys.stderr)
+            print("[EXTRACT DEBUG] Trying to extract from ALL tables as last resort...", file=sys.stderr)
             # Try extracting from ALL tables as last resort
             for i, table in enumerate(tables):
                 rows = table.find_all('tr')
                 if len(rows) > 1:  # More than just header
-                    print(f"[TIMETABLE] Trying to extract from table {i} as last resort...", file=sys.stderr)
+                    print(f"[EXTRACT DEBUG] Attempting extraction from table {i} (has {len(rows)} rows)...", file=sys.stderr)
                     courses = extract_from_table(table)
                     if courses:
-                        print(f"[TIMETABLE] Successfully extracted {len(courses)} courses from table {i}", file=sys.stderr)
+                        print(f"[EXTRACT DEBUG] ✓ Successfully extracted {len(courses)} courses from table {i}", file=sys.stderr)
                         break
+                    else:
+                        print(f"[EXTRACT DEBUG] ✗ No courses extracted from table {i}", file=sys.stderr)
         
-        print(f"[TIMETABLE] Final result: {len(courses)} course entries extracted", file=sys.stderr)
+        print(f"[EXTRACT DEBUG] Final result: {len(courses)} course entries extracted", file=sys.stderr)
+        
+        if len(courses) == 0:
+            print("[EXTRACT DEBUG] WARNING: No courses extracted despite finding tables", file=sys.stderr)
+            print("[EXTRACT DEBUG] This might indicate the table structure is different than expected", file=sys.stderr)
+        
+        print("[EXTRACT DEBUG] === TIMETABLE EXTRACTION COMPLETE ===", file=sys.stderr)
         
         # Add batch number to each course entry
         if batch_number:

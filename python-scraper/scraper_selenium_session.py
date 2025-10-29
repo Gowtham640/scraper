@@ -550,43 +550,73 @@ class SRMAcademiaScraperSelenium:
             
             print("[OK] Not on login page, proceeding with calendar extraction", file=sys.stderr)
             
-            # ✅ CRITICAL: Wait for calendar table to load (like timetable does)
-            print("[STEP 3] Waiting for calendar table to load...", file=sys.stderr)
-            try:
-                # Wait for calendar table - try multiple selectors
-                selectors = [
-                    (By.TAG_NAME, 'table'),
-                    (By.CSS_SELECTOR, 'table'),
-                ]
-                
-                table_found = False
-                for by, selector in selectors:
-                    try:
-                        print(f"[DEBUG] Waiting for table with selector: {selector} (max 5s)", file=sys.stderr)
-                        WebDriverWait(self.driver, 5).until(
-                            EC.presence_of_element_located((by, selector))
-                        )
-                        print(f"[OK] Calendar table found with selector: {selector}", file=sys.stderr)
-                        table_found = True
-                        break
-                    except TimeoutException:
-                        print(f"[DEBUG] No table found with selector: {selector} (timed out after 5s)", file=sys.stderr)
-                        continue
-                
-                # Re-check for login page before final wait
-                if not table_found:
-                    # Double-check we're not on login page
-                    if "Login" in self.driver.title or "signinFrame" in self.driver.page_source[:500]:
-                        print("[ERROR] Login page detected after wait - session expired during navigation", file=sys.stderr)
-                        return None
-                    
-                    print("[WARN] No table found with any selector, continuing anyway...", file=sys.stderr)
-            except Exception as e:
-                print(f"[WARN] Error waiting for table: {e}", file=sys.stderr)
+            # ✅ CRITICAL: Wait for calendar table WITH ROWS (not just table presence)
+            print("[STEP 3] Waiting for calendar table with rows to load...", file=sys.stderr)
             
-            # ✅ CRITICAL: Extra wait for JavaScript rendering (calendar needs time to render)
-            print("[STEP 4] Waiting for JavaScript rendering...", file=sys.stderr)
-            time.sleep(2)  # Give it time to fully render calendar content
+            def calendar_table_has_rows(driver):
+                """Custom condition: Check if table exists AND has rows"""
+                try:
+                    tables = driver.find_elements(By.TAG_NAME, 'table')
+                    print(f"[DEBUG] Found {len(tables)} table elements on page", file=sys.stderr)
+                    
+                    if len(tables) == 0:
+                        return False
+                    
+                    # Check if any table has rows (tr elements)
+                    for idx, table in enumerate(tables):
+                        rows = table.find_elements(By.TAG_NAME, 'tr')
+                        print(f"[DEBUG] Table {idx+1}: Found {len(rows)} rows", file=sys.stderr)
+                        
+                        if len(rows) > 0:
+                            # Check if rows have cells
+                            cells_count = 0
+                            for row in rows[:3]:  # Check first 3 rows
+                                cells = row.find_elements(By.TAG_NAME, 'td') + row.find_elements(By.TAG_NAME, 'th')
+                                cells_count += len(cells)
+                            
+                            print(f"[DEBUG] Table {idx+1}: First 3 rows have {cells_count} cells total", file=sys.stderr)
+                            
+                            if cells_count > 0:
+                                print(f"[OK] Calendar table {idx+1} has {len(rows)} rows with data", file=sys.stderr)
+                                return True
+                    
+                    return False
+                except Exception as e:
+                    print(f"[DEBUG] Error checking table rows: {e}", file=sys.stderr)
+                    return False
+            
+            table_with_rows_found = False
+            try:
+                print("[DEBUG] Waiting up to 15 seconds for calendar table with rows...", file=sys.stderr)
+                WebDriverWait(self.driver, 15).until(calendar_table_has_rows)
+                table_with_rows_found = True
+                print("[OK] Calendar table with rows found!", file=sys.stderr)
+            except TimeoutException:
+                print("[WARN] Timeout waiting for table with rows after 15s", file=sys.stderr)
+                # Debug: Check what we actually have
+                try:
+                    tables = self.driver.find_elements(By.TAG_NAME, 'table')
+                    print(f"[DEBUG] After timeout: Found {len(tables)} tables", file=sys.stderr)
+                    for idx, table in enumerate(tables):
+                        rows = table.find_elements(By.TAG_NAME, 'tr')
+                        print(f"[DEBUG] Table {idx+1} has {len(rows)} rows", file=sys.stderr)
+                        if len(rows) > 0:
+                            row_text_sample = rows[0].text[:100]
+                            print(f"[DEBUG] Table {idx+1} first row text sample: {row_text_sample}", file=sys.stderr)
+                except Exception as e:
+                    print(f"[DEBUG] Error inspecting tables after timeout: {e}", file=sys.stderr)
+            
+            # Re-check for login page
+            if not table_with_rows_found:
+                if "Login" in self.driver.title or "signinFrame" in self.driver.page_source[:500]:
+                    print("[ERROR] Login page detected after wait - session expired during navigation", file=sys.stderr)
+                    return None
+                print("[WARN] Table with rows not found, but continuing...", file=sys.stderr)
+            
+            # ✅ CRITICAL: Extra wait for JavaScript rendering (calendar needs time to fully render all content)
+            print("[STEP 4] Waiting for JavaScript to fully render calendar content...", file=sys.stderr)
+            time.sleep(3)  # Give additional time for full calendar rendering
+            print("[OK] Finished waiting for JS rendering", file=sys.stderr)
             
             # Final login page check before returning
             final_title = self.driver.title
@@ -620,15 +650,49 @@ class SRMAcademiaScraperSelenium:
                     print("[ERROR] Confirmed: This is a login page, not calendar", file=sys.stderr)
                     return None
             
+            # ✅ COMPREHENSIVE DEBUG: Check HTML structure before returning
+            print("[DEBUG] === CALENDAR HTML STRUCTURE ANALYSIS ===", file=sys.stderr)
+            print(f"[DEBUG] Total HTML length: {len(page_source)} characters", file=sys.stderr)
+            
+            # Count tables in HTML
+            table_count = page_source.lower().count('<table')
+            print(f"[DEBUG] Number of '<table' tags found: {table_count}", file=sys.stderr)
+            
+            # Count rows in HTML
+            tr_count = page_source.lower().count('<tr')
+            print(f"[DEBUG] Number of '<tr' tags found: {tr_count}", file=sys.stderr)
+            
+            # Count cells in HTML
+            td_count = page_source.lower().count('<td')
+            th_count = page_source.lower().count('<th')
+            print(f"[DEBUG] Number of '<td' tags: {td_count}, '<th' tags: {th_count}", file=sys.stderr)
+            
+            # Check for expected calendar markers
+            has_jul = "Jul" in page_source or "Jul '25" in page_source
+            has_aug = "Aug" in page_source or "Aug '25" in page_source
+            has_2025 = "2025" in page_source or "'25" in page_source
+            print(f"[DEBUG] Contains 'Jul': {has_jul}, 'Aug': {has_aug}, '2025/'25': {has_2025}", file=sys.stderr)
+            
+            # Sample HTML structure (first 500 chars)
+            print(f"[DEBUG] First 500 characters of HTML: {page_source[:500]}", file=sys.stderr)
+            
+            # Sample table structure if found
+            if '<table' in page_source.lower():
+                table_start = page_source.lower().find('<table')
+                table_sample = page_source[table_start:table_start+1000]
+                print(f"[DEBUG] Sample table HTML (first 1000 chars): {table_sample}", file=sys.stderr)
+            
             # Check if we got the right content
             if "Jul '25" in page_source and "Aug '25" in page_source:
-                print("[OK] Calendar content detected in page source", file=sys.stderr)
+                print("[OK] Calendar content markers detected in page source", file=sys.stderr)
+                print("[DEBUG] === CALENDAR HTML STRUCTURE ANALYSIS COMPLETE ===", file=sys.stderr)
                 return page_source
             else:
-                print("[WARNING] Calendar content not detected in page source", file=sys.stderr)
-                print(f"[DEBUG] Page source contains 'Jul': {'Jul' in page_source}", file=sys.stderr)
-                print(f"[DEBUG] Page source contains 'Aug': {'Aug' in page_source}", file=sys.stderr)
+                print("[WARNING] Calendar content markers not detected in page source", file=sys.stderr)
+                print(f"[DEBUG] Page source contains 'Jul': {has_jul}", file=sys.stderr)
+                print(f"[DEBUG] Page source contains 'Aug': {has_aug}", file=sys.stderr)
                 print(f"[DEBUG] Page source contains 'table': {'table' in page_source.lower()}", file=sys.stderr)
+                print("[DEBUG] === CALENDAR HTML STRUCTURE ANALYSIS COMPLETE ===", file=sys.stderr)
                 # Return anyway, let the parser handle it (might be different year/format)
                 return page_source
             
