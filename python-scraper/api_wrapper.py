@@ -574,10 +574,25 @@ def get_marks_page_html(scraper):
         print(f"[MARKS] Current URL: {scraper.driver.current_url}", file=sys.stderr)
         print(f"[MARKS] Page title: {scraper.driver.title}", file=sys.stderr)
         
+        # ✅ CRITICAL: Check for login page IMMEDIATELY
+        current_title = scraper.driver.title
+        page_source_check = scraper.driver.page_source[:1000] if len(scraper.driver.page_source) > 0 else ""
+        
+        if "Login" in current_title or "signinFrame" in page_source_check:
+            print(f"[MARKS] ✗ ERROR: Redirected to login page - session expired or login failed", file=sys.stderr)
+            print(f"[MARKS] Title: {current_title}, Contains signinFrame: {'signinFrame' in page_source_check}", file=sys.stderr)
+            return None
+        
         # Get page source
         page_source = scraper.driver.page_source
         page_length = len(page_source)
         print(f"[MARKS] Page source length: {page_length} characters", file=sys.stderr)
+        
+        # ✅ CRITICAL: Double-check we're not on login page (even if page is large)
+        if "Login" in scraper.driver.title or "signinFrame" in page_source[:5000]:
+            print(f"[MARKS] ✗ ERROR: Login page detected despite large page size", file=sys.stderr)
+            print(f"[MARKS] Title: {scraper.driver.title}", file=sys.stderr)
+            return None
         
         # Check if we got valid content
         if page_source and page_length > 2000:
@@ -1214,11 +1229,19 @@ def get_attendance_and_marks_data_with_scraper(scraper, email, password, trust_l
         if not html_content:
             print("[UNIFIED API] Failed to get HTML content after all attempts", file=sys.stderr)
             return {
-                "attendance": {"success": False, "error": "Failed to get data"},
-                "marks": {"success": False, "error": "Failed to get data"}
+                "attendance": {"success": False, "error": "Failed to get data - likely on login page"},
+                "marks": {"success": False, "error": "Failed to get data - likely on login page"}
             }
         
         print(f"[UNIFIED API] Got HTML content ({len(html_content)} characters)", file=sys.stderr)
+        
+        # ✅ CRITICAL: Check if we're on login page (even though get_marks_page_html should have caught this)
+        if "Login" in scraper.driver.title or "signinFrame" in html_content[:5000]:
+            print("[UNIFIED API] ERROR: Login page detected in HTML content - marking as failed", file=sys.stderr)
+            return {
+                "attendance": {"success": False, "error": "Session expired - redirected to login page"},
+                "marks": {"success": False, "error": "Session expired - redirected to login page"}
+            }
         
         # Extract attendance data (same as individual function)
         print("[UNIFIED API] Extracting attendance data...", file=sys.stderr)
@@ -1240,14 +1263,29 @@ def get_attendance_and_marks_data_with_scraper(scraper, email, password, trust_l
                 "cached": False
             }
         else:
+            # ✅ FIXED: If no data extracted AND we might be on login page, mark as failed
             print("[UNIFIED API] No attendance data extracted", file=sys.stderr)
-            attendance_result = {
-                "success": True,
-                "data": {"all_subjects": [], "summary": {"total_subjects": 0}},
-                "type": "attendance",
-                "count": 0,
-                "cached": False
-            }
+            # Check if this looks like a login page (no data + login indicators)
+            is_likely_login_page = "signinFrame" in html_content[:5000] or len(html_content) < 10000
+            if is_likely_login_page:
+                print("[UNIFIED API] WARNING: No data and page looks like login page - marking as failed", file=sys.stderr)
+                attendance_result = {
+                    "success": False,
+                    "error": "No data extracted - likely on login page",
+                    "type": "attendance",
+                    "count": 0,
+                    "cached": False
+                }
+            else:
+                # Legitimately no data (empty table)
+                attendance_result = {
+                    "success": True,
+                    "data": {"all_subjects": [], "summary": {"total_subjects": 0}},
+                    "type": "attendance",
+                    "count": 0,
+                    "semester": semester,
+                    "cached": False
+                }
         
         # Extract marks data (same as individual function) - USE THE SAME HTML BUT WITH PROPER VALIDATION
         print("[UNIFIED API] Extracting marks data...", file=sys.stderr)
@@ -1271,7 +1309,20 @@ def get_attendance_and_marks_data_with_scraper(scraper, email, password, trust_l
             }
         else:
             print("[UNIFIED API] No marks data extracted", file=sys.stderr)
-            empty_marks_json = {
+            # ✅ FIXED: Check if we're on login page - if so, mark as failed
+            is_likely_login_page = "signinFrame" in html_content[:5000] or len(html_content) < 10000
+            if is_likely_login_page:
+                print("[UNIFIED API] WARNING: No marks data and page looks like login page - marking as failed", file=sys.stderr)
+                marks_result = {
+                    "success": False,
+                    "error": "No data extracted - likely on login page",
+                    "type": "marks",
+                    "count": 0,
+                    "cached": False
+                }
+            else:
+                # Legitimately no marks data
+                empty_marks_json = {
                 "metadata": {
                     "generated_at": datetime.now().isoformat(),
                     "source": "SRM Academia Portal - Internal Marks",

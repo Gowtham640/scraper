@@ -441,21 +441,55 @@ class SRMAcademiaScraperSelenium:
                     print(f"[WARNING] Could not get page state for debugging: {debug_e}", file=sys.stderr)
                 
                 # Wait for dashboard or any protected page to load
-                print("[STEP 7.2] Waiting for dashboard to load (5s timeout)...", file=sys.stderr)
-                WebDriverWait(self.driver, 5).until(
-                    lambda driver: "Dashboard" in driver.title or "academia" in driver.current_url
-                )
+                # ✅ FIXED: Must be on Dashboard, NOT on login page
+                print("[STEP 7.2] Waiting for dashboard to load (10s timeout)...", file=sys.stderr)
+                try:
+                    WebDriverWait(self.driver, 10).until(
+                        lambda driver: "Dashboard" in driver.title and "Login" not in driver.title
+                    )
+                except TimeoutException:
+                    # If Dashboard check fails, verify we're not on login page
+                    final_title_check = self.driver.title
+                    final_url_check = self.driver.current_url
+                    print(f"[ERROR] Timeout waiting for Dashboard. Current title: {final_title_check}, URL: {final_url_check}", file=sys.stderr)
+                    if "Login" in final_title_check or "signinFrame" in self.driver.page_source[:1000]:
+                        print("[ERROR] Still on login page after timeout - login likely failed", file=sys.stderr)
+                        return False
+                    # Maybe we're on a different page - check URL contains protected page indicator
+                    if "#Page:" not in final_url_check:
+                        print("[ERROR] Not on a protected page (#Page: missing from URL) - login likely failed", file=sys.stderr)
+                        return False
+                    print("[WARNING] Dashboard not in title, but URL suggests protected page - continuing", file=sys.stderr)
                 
-                # Verify final state
+                # Verify final state - CRITICAL: Must NOT be on login page
                 final_url = self.driver.current_url
                 final_title = self.driver.title
-                print(f"[OK] Login successful! Final URL: {final_url}, Final Title: {final_title}", file=sys.stderr)
+                page_source_check = self.driver.page_source[:1000] if len(self.driver.page_source) > 0 else ""
                 
-                # Double-check we're not on login page
-                if "Login" in final_title or "signinFrame" in self.driver.page_source[:1000]:
-                    print("[ERROR] Login appeared successful but we're still on login page!", file=sys.stderr)
+                print(f"[LOGIN VERIFY] Final URL: {final_url}", file=sys.stderr)
+                print(f"[LOGIN VERIFY] Final Title: {final_title}", file=sys.stderr)
+                print(f"[LOGIN VERIFY] Contains 'Login' in title: {'Login' in final_title}", file=sys.stderr)
+                print(f"[LOGIN VERIFY] Contains 'signinFrame' in source: {'signinFrame' in page_source_check}", file=sys.stderr)
+                print(f"[LOGIN VERIFY] Contains 'Dashboard' in title: {'Dashboard' in final_title}", file=sys.stderr)
+                
+                # Double-check we're not on login page - THIS IS CRITICAL
+                if "Login" in final_title:
+                    print("[ERROR] Login failed - still on login page! Title contains 'Login'", file=sys.stderr)
                     print(f"[ERROR] Title: {final_title}, URL: {final_url}", file=sys.stderr)
                     return False
+                
+                if "signinFrame" in page_source_check:
+                    print("[ERROR] Login failed - login frame still present in page source!", file=sys.stderr)
+                    print(f"[ERROR] Title: {final_title}, URL: {final_url}", file=sys.stderr)
+                    return False
+                
+                # Must be on Dashboard or protected page
+                if "Dashboard" not in final_title and "#Page:" not in final_url:
+                    print("[ERROR] Login verification failed - not on Dashboard and not on protected page", file=sys.stderr)
+                    print(f"[ERROR] Title: {final_title}, URL: {final_url}", file=sys.stderr)
+                    return False
+                
+                print(f"[OK] Login successful! Final URL: {final_url}, Final Title: {final_title}", file=sys.stderr)
                 
                 # Save session if enabled
                 if self.use_session:
