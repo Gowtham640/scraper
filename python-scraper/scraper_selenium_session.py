@@ -299,6 +299,17 @@ class SRMAcademiaScraperSelenium:
                 next_button.click()
                 print("[OK] Next button clicked", file=sys.stderr)
                 time.sleep(2)  # Wait for password field to appear
+                # DEBUG: Check iframe state after Next click
+                print("[DEBUG] After Next click - checking iframe state...", file=sys.stderr)
+                try:
+                    iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
+                    print(f"[DEBUG] Found {len(iframes)} iframes in current context", file=sys.stderr)
+                    for idx, iframe in enumerate(iframes):
+                        iframe_id = iframe.get_attribute("id")
+                        iframe_name = iframe.get_attribute("name")
+                        print(f"[DEBUG] Iframe {idx}: id='{iframe_id}', name='{iframe_name}'", file=sys.stderr)
+                except Exception as e:
+                    print(f"[DEBUG] Error checking iframes: {e}", file=sys.stderr)
             except NoSuchElementException:
                 print("[ERROR] Could not find Next button", file=sys.stderr)
                 self.driver.switch_to.default_content()
@@ -307,14 +318,41 @@ class SRMAcademiaScraperSelenium:
             # Find and fill password field
             print("[STEP 5] Entering password...", file=sys.stderr)
             try:
+                # DEBUG: First check if element is present
+                print("[DEBUG] Checking for password field presence...", file=sys.stderr)
+                try:
+                    password_field_presence = self.driver.find_element(By.ID, "password")
+                    print("[DEBUG] Password field found in DOM", file=sys.stderr)
+                    # Check if it's displayed
+                    is_displayed = password_field_presence.is_displayed()
+                    is_enabled = password_field_presence.is_enabled()
+                    print(f"[DEBUG] Password field - displayed: {is_displayed}, enabled: {is_enabled}", file=sys.stderr)
+                except NoSuchElementException:
+                    print("[DEBUG] Password field NOT found in DOM", file=sys.stderr)
+                
+                # Wait for element to be ACTUALLY interactable (not just present)
+                print("[DEBUG] Waiting for password field to be clickable...", file=sys.stderr)
                 password_field = self.wait.until(
-                    EC.presence_of_element_located((By.ID, "password"))
+                    EC.element_to_be_clickable((By.ID, "password"))
                 )
+                print("[DEBUG] Password field is now clickable", file=sys.stderr)
+                
+                # Now it's safe to clear and type
+                print("[DEBUG] Attempting to clear password field...", file=sys.stderr)
                 password_field.clear()
+                print("[DEBUG] Password field cleared successfully", file=sys.stderr)
+                
+                print("[DEBUG] Attempting to send password keys...", file=sys.stderr)
                 password_field.send_keys(password)
                 print("[OK] Password entered", file=sys.stderr)
             except TimeoutException:
-                print("[ERROR] Could not find password field", file=sys.stderr)
+                print("[ERROR] Could not find password field (timeout)", file=sys.stderr)
+                print("[DEBUG] Checking page source for password field...", file=sys.stderr)
+                page_source = self.driver.page_source
+                if "password" in page_source.lower():
+                    print("[DEBUG] 'password' found in page source but element not interactable", file=sys.stderr)
+                else:
+                    print("[DEBUG] 'password' NOT found in page source", file=sys.stderr)
                 self.driver.switch_to.default_content()
                 return False
 
