@@ -319,7 +319,17 @@ class SRMAcademiaScraperSelenium:
                         EC.presence_of_element_located((By.ID, "signinFrame"))
                     )
                     self.driver.switch_to.frame(iframe)
-                    print("[DEBUG] Successfully re-entered iframe", file=sys.stderr)
+                    print("[DEBUG] Successfully re-entered parent iframe", file=sys.stderr)
+                    
+                    # Check for nested iframes INSIDE signinFrame (Microsoft login)
+                    print("[DEBUG] Checking for nested iframes inside signinFrame...", file=sys.stderr)
+                    nested_iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
+                    print(f"[DEBUG] Found {len(nested_iframes)} nested iframes", file=sys.stderr)
+                    if len(nested_iframes) > 0:
+                        # Switch to the first nested iframe (Microsoft login container)
+                        print("[DEBUG] Switching to first nested iframe...", file=sys.stderr)
+                        self.driver.switch_to.frame(nested_iframes[0])
+                        print("[DEBUG] Successfully switched to nested iframe", file=sys.stderr)
                 except Exception as e:
                     print(f"[DEBUG] Failed to re-enter iframe: {e}", file=sys.stderr)
             except NoSuchElementException:
