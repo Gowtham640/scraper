@@ -378,6 +378,21 @@ class SRMAcademiaScraperSelenium:
             print("[STEP 4.5] Waiting for password field to appear...", file=sys.stderr)
             time.sleep(2)  # Wait for iframe to update and password field to render
             
+            # ✅ CRITICAL: Re-switch to iframe after Next click (iframe becomes stale)
+            print("[STEP 4.6] Re-switching to iframe after Next click...", file=sys.stderr)
+            try:
+                # Switch back to main content first
+                self.driver.switch_to.default_content()
+                # Wait for iframe to be ready
+                iframe = self.wait.until(
+                    EC.presence_of_element_located((By.ID, "signinFrame"))
+                )
+                # Switch back into iframe
+                self.driver.switch_to.frame(iframe)
+                print("[OK] Re-switched to iframe successfully", file=sys.stderr)
+            except TimeoutException:
+                print("[WARN] Could not re-switch to iframe - continuing anyway", file=sys.stderr)
+            
             # ✅ OPTIMIZED: Find and fill password field - use OLD METHOD like OLD CODE!
             print("[STEP 5] Entering password...", file=sys.stderr)
             try:
