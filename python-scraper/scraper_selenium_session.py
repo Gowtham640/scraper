@@ -356,7 +356,12 @@ class SRMAcademiaScraperSelenium:
                 next_button = self.driver.find_element(By.ID, "nextbtn")
                 next_button.click()
                 print("[OK] Next button clicked", file=sys.stderr)
-                # ✅ OPTIMIZED: No fixed sleep - smart wait below will return as soon as password field is ready
+                
+                # ✅ FIX: Small sleep to let iframe update after Next button click
+                # The Microsoft login UI needs time to transition from email to password view
+                print("[STEP 4.5] Waiting for password field to appear...", file=sys.stderr)
+                time.sleep(2)  # Wait for iframe to update and password field to render
+                
             except (NoSuchElementException, WebDriverException) as e:
                 if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
                     print("[ERROR] Browser crashed during next button click", file=sys.stderr)
