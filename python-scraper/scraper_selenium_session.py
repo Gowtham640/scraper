@@ -259,28 +259,25 @@ class SRMAcademiaScraperSelenium:
         """Login to the academia portal using Selenium with session management"""
         try:
             print(f"\n=== LOGIN WITH SELENIUM (Session: {self.use_session}) ===", file=sys.stderr)
-            
             # Don't skip login - always attempt it when this method is called
             # The session validation should be done before calling this method
-            
             print(f"[STEP 1] Loading portal page...", file=sys.stderr)
             self.driver.get("https://academia.srmist.edu.in/")
             time.sleep(1)  # Reduced from 3s to 1s
-            
-                print(f"[OK] Page loaded: {self.driver.title}", file=sys.stderr)
-            
+            print(f"[OK] Page loaded: {self.driver.title}", file=sys.stderr)
+
             # Switch to the iframe
             print("[STEP 2] Switching to login iframe...", file=sys.stderr)
-                try:
-                    iframe = self.wait.until(
-                        EC.presence_of_element_located((By.ID, "signinFrame"))
-                    )
-                    self.driver.switch_to.frame(iframe)
-                    print("[OK] Switched to iframe", file=sys.stderr)
-                except TimeoutException:
+            try:
+                iframe = self.wait.until(
+                    EC.presence_of_element_located((By.ID, "signinFrame"))
+                )
+                self.driver.switch_to.frame(iframe)
+                print("[OK] Switched to iframe", file=sys.stderr)
+            except TimeoutException:
                 print("[ERROR] Could not find login iframe", file=sys.stderr)
                 return False
-            
+
             # Find and fill email field
             print("[STEP 3] Entering email...", file=sys.stderr)
             try:
@@ -292,9 +289,9 @@ class SRMAcademiaScraperSelenium:
                 print(f"[OK] Email entered: {email}", file=sys.stderr)
             except TimeoutException:
                 print("[ERROR] Could not find email field", file=sys.stderr)
-                    self.driver.switch_to.default_content()
+                self.driver.switch_to.default_content()
                 return False
-            
+
             # Click Next button to reveal password field
             print("[STEP 4] Clicking Next button...", file=sys.stderr)
             try:
@@ -304,9 +301,9 @@ class SRMAcademiaScraperSelenium:
                 time.sleep(2)  # Wait for password field to appear
             except NoSuchElementException:
                 print("[ERROR] Could not find Next button", file=sys.stderr)
-                    self.driver.switch_to.default_content()
+                self.driver.switch_to.default_content()
                 return False
-            
+
             # Find and fill password field
             print("[STEP 5] Entering password...", file=sys.stderr)
             try:
@@ -318,9 +315,9 @@ class SRMAcademiaScraperSelenium:
                 print("[OK] Password entered", file=sys.stderr)
             except TimeoutException:
                 print("[ERROR] Could not find password field", file=sys.stderr)
-                    self.driver.switch_to.default_content()
+                self.driver.switch_to.default_content()
                 return False
-            
+
             # Click login button (same as next button)
             print("[STEP 6] Clicking login button...", file=sys.stderr)
             try:
@@ -331,35 +328,30 @@ class SRMAcademiaScraperSelenium:
                 print("[OK] Login button clicked", file=sys.stderr)
             except TimeoutException:
                 print("[ERROR] Could not find login button", file=sys.stderr)
-                    self.driver.switch_to.default_content()
+                self.driver.switch_to.default_content()
                 return False
-            
+
             # Wait for login to complete
             print("[STEP 7] Waiting for login to complete...", file=sys.stderr)
             time.sleep(2)  # Reduced from 5s to 2s
-            
+
             # Switch back to default content
             self.driver.switch_to.default_content()
-            
+
             # Check if login was successful
             try:
                 # Wait for login page to disappear and be on protected academia page
                 WebDriverWait(self.driver, 10).until(
                     lambda driver: "Login" not in driver.title and "academia" in driver.current_url
                 )
-                
                 print("[OK] Login successful!", file=sys.stderr)
-                
                 # Save session if enabled
                 if self.use_session:
                     self.save_session(email)
-                
                 return True
-                
             except TimeoutException:
                 print("[ERROR] Login failed - timeout waiting for dashboard", file=sys.stderr)
                 return False
-                
         except Exception as e:
             print(f"[ERROR] Login failed: {e}", file=sys.stderr)
             import traceback
