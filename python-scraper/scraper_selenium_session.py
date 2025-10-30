@@ -356,12 +356,6 @@ class SRMAcademiaScraperSelenium:
                 next_button = self.driver.find_element(By.ID, "nextbtn")
                 next_button.click()
                 print("[OK] Next button clicked", file=sys.stderr)
-                
-                # ✅ FIX: Small sleep to let iframe update after Next button click
-                # The Microsoft login UI needs time to transition from email to password view
-                print("[STEP 4.5] Waiting for password field to appear...", file=sys.stderr)
-                time.sleep(2)  # Wait for iframe to update and password field to render
-                
             except (NoSuchElementException, WebDriverException) as e:
                 if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
                     print("[ERROR] Browser crashed during next button click", file=sys.stderr)
@@ -379,12 +373,17 @@ class SRMAcademiaScraperSelenium:
                     pass
                 return False
             
-            # ✅ OPTIMIZED: Find and fill password field (smart wait - returns as soon as ready, often faster than fixed sleep)
+            # ✅ CRITICAL FIX: Wait AFTER try/except (outside the try block!)
+            # The Microsoft login UI needs time to transition from email to password view
+            print("[STEP 4.5] Waiting for password field to appear...", file=sys.stderr)
+            time.sleep(2)  # Wait for iframe to update and password field to render
+            
+            # ✅ OPTIMIZED: Find and fill password field - use OLD METHOD like OLD CODE!
             print("[STEP 5] Entering password...", file=sys.stderr)
             try:
-                # Use element_to_be_clickable - ensures field is ready and interactable, often faster than fixed sleep
-                password_field = WebDriverWait(self.driver, 10).until(
-                    EC.element_to_be_clickable((By.ID, "password"))
+                # Use self.wait instead of creating new WebDriverWait, and use presence_of_element_located like old code
+                password_field = self.wait.until(
+                    EC.presence_of_element_located((By.ID, "password"))
                 )
                 password_field.clear()
                 password_field.send_keys(password)
