@@ -310,6 +310,18 @@ class SRMAcademiaScraperSelenium:
                         print(f"[DEBUG] Iframe {idx}: id='{iframe_id}', name='{iframe_name}'", file=sys.stderr)
                 except Exception as e:
                     print(f"[DEBUG] Error checking iframes: {e}", file=sys.stderr)
+                
+                # CRITICAL FIX: Re-enter iframe after Next click (iframe reloads)
+                print("[DEBUG] Re-entering iframe after Next click...", file=sys.stderr)
+                try:
+                    self.driver.switch_to.default_content()
+                    iframe = self.wait.until(
+                        EC.presence_of_element_located((By.ID, "signinFrame"))
+                    )
+                    self.driver.switch_to.frame(iframe)
+                    print("[DEBUG] Successfully re-entered iframe", file=sys.stderr)
+                except Exception as e:
+                    print(f"[DEBUG] Failed to re-enter iframe: {e}", file=sys.stderr)
             except NoSuchElementException:
                 print("[ERROR] Could not find Next button", file=sys.stderr)
                 self.driver.switch_to.default_content()
