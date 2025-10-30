@@ -319,15 +319,54 @@ class SRMAcademiaScraperSelenium:
             
             # Find and fill password field
             print("[STEP 5] Entering password...", file=sys.stderr)
+            # Robust password discovery: handle nested iframe and generic selector
+            def try_find_password_in_current_frame():
+                try:
+                    return self.wait.until(EC.element_to_be_clickable((By.ID, "password")))
+                except TimeoutException:
+                    return self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='password']")))
+
+            password_field = None
             try:
-                password_field = self.wait.until(
-                    EC.element_to_be_clickable((By.ID, "password"))
-                )
+                # Try in current iframe first
+                password_field = try_find_password_in_current_frame()
+            except TimeoutException:
+                # Scan nested iframes injected after Next
+                try:
+                    iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
+                    print(f"[INFO] Password field not in current frame. Iframes found: {len(iframes)}", file=sys.stderr)
+                    found = False
+                    for idx, f in enumerate(iframes):
+                        try:
+                            self.driver.switch_to.frame(f)
+                            print(f"[INFO] Switched to nested iframe #{idx}", file=sys.stderr)
+                            try:
+                                password_field = try_find_password_in_current_frame()
+                                found = True
+                                print("[OK] Password field found in nested iframe", file=sys.stderr)
+                                break
+                            except TimeoutException:
+                                self.driver.switch_to.parent_frame()
+                        except Exception as e:
+                            print(f"[WARN] Could not use nested iframe #{idx}: {e}", file=sys.stderr)
+
+                    if not found:
+                        print("[ERROR] Could not find password field", file=sys.stderr)
+                        self.driver.switch_to.default_content()
+                        return False
+                except Exception as e:
+                    print(f"[ERROR] Nested iframe scan failed: {e}", file=sys.stderr)
+                    self.driver.switch_to.default_content()
+                    return False
+
+            # Interact safely
+            try:
+                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", password_field)
                 password_field.click()
                 password_field.send_keys(password)
                 print("[OK] Password entered", file=sys.stderr)
-            except TimeoutException:
-                print("[ERROR] Could not find password field", file=sys.stderr)
+            except Exception as e:
+                print(f"[ERROR] Unable to type password: {e}", file=sys.stderr)
                 self.driver.switch_to.default_content()
                 return False
             
