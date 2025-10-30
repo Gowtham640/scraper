@@ -302,6 +302,16 @@ class SRMAcademiaScraperSelenium:
                 next_button.click()
                 print("[OK] Next button clicked", file=sys.stderr)
                 time.sleep(2)  # Wait for password field to appear
+                # Re-enter iframe in case it reloaded after Next
+                try:
+                    self.driver.switch_to.default_content()
+                    iframe = self.wait.until(
+                        EC.presence_of_element_located((By.ID, "signinFrame"))
+                    )
+                    self.driver.switch_to.frame(iframe)
+                    print("[OK] Re-entered iframe after Next", file=sys.stderr)
+                except TimeoutException:
+                    print("[WARN] Could not re-enter iframe after Next", file=sys.stderr)
             except NoSuchElementException:
                 print("[ERROR] Could not find Next button", file=sys.stderr)
                 self.driver.switch_to.default_content()
@@ -311,9 +321,9 @@ class SRMAcademiaScraperSelenium:
             print("[STEP 5] Entering password...", file=sys.stderr)
             try:
                 password_field = self.wait.until(
-                    EC.presence_of_element_located((By.ID, "password"))
+                    EC.element_to_be_clickable((By.ID, "password"))
                 )
-                password_field.clear()
+                password_field.click()
                 password_field.send_keys(password)
                 print("[OK] Password entered", file=sys.stderr)
             except TimeoutException:
