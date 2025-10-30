@@ -308,9 +308,9 @@ class SRMAcademiaScraperSelenium:
             print("[STEP 5] Entering password...", file=sys.stderr)
             try:
                 password_field = self.wait.until(
-                    EC.element_to_be_clickable((By.ID, "password"))
+                    EC.presence_of_element_located((By.ID, "password"))
                 )
-                password_field.click()
+                password_field.clear()
                 password_field.send_keys(password)
                 print("[OK] Password entered", file=sys.stderr)
             except TimeoutException:
