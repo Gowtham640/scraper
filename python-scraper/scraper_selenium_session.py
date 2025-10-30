@@ -267,17 +267,17 @@ class SRMAcademiaScraperSelenium:
             self.driver.get("https://academia.srmist.edu.in/")
             time.sleep(1)  # Reduced from 3s to 1s
             
-            print(f"[OK] Page loaded: {self.driver.title}", file=sys.stderr)
+                print(f"[OK] Page loaded: {self.driver.title}", file=sys.stderr)
             
             # Switch to the iframe
             print("[STEP 2] Switching to login iframe...", file=sys.stderr)
-            try:
-                iframe = self.wait.until(
-                    EC.presence_of_element_located((By.ID, "signinFrame"))
-                )
-                self.driver.switch_to.frame(iframe)
-                print("[OK] Switched to iframe", file=sys.stderr)
-            except TimeoutException:
+                try:
+                    iframe = self.wait.until(
+                        EC.presence_of_element_located((By.ID, "signinFrame"))
+                    )
+                    self.driver.switch_to.frame(iframe)
+                    print("[OK] Switched to iframe", file=sys.stderr)
+                except TimeoutException:
                 print("[ERROR] Could not find login iframe", file=sys.stderr)
                 return False
             
