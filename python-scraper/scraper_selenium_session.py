@@ -259,69 +259,26 @@ class SRMAcademiaScraperSelenium:
         """Login to the academia portal using Selenium with session management"""
         try:
             print(f"\n=== LOGIN WITH SELENIUM (Session: {self.use_session}) ===", file=sys.stderr)
-            print(f"[LOGIN DEBUG] Email: {email}", file=sys.stderr)
-            print(f"[LOGIN DEBUG] Password provided: {password is not None}", file=sys.stderr)
-            print(f"[LOGIN DEBUG] Password length: {len(password) if password else 0}", file=sys.stderr)
             
             # Don't skip login - always attempt it when this method is called
             # The session validation should be done before calling this method
             
             print(f"[STEP 1] Loading portal page...", file=sys.stderr)
             self.driver.get("https://academia.srmist.edu.in/")
-            time.sleep(0.5)  # Optimized for speed
+            time.sleep(1)  # Reduced from 3s to 1s
             
-            # Verify window is still open after page load
-            try:
-                _ = self.driver.current_url
-                print(f"[OK] Page loaded: {self.driver.title}", file=sys.stderr)
-            except Exception as e:
-                print(f"[ERROR] Browser window closed unexpectedly: {e}", file=sys.stderr)
-                return False
+            print(f"[OK] Page loaded: {self.driver.title}", file=sys.stderr)
             
-            # Switch to the iframe - simplified approach for stability
+            # Switch to the iframe
             print("[STEP 2] Switching to login iframe...", file=sys.stderr)
-            
             try:
-                # Verify window is still open before finding iframe
-                try:
-                    _ = self.driver.current_url
-                except WebDriverException as e:
-                    print(f"[ERROR] Browser window detached before iframe detection: {e}", file=sys.stderr)
-                    return False
-                
-                # Find iframe using ID (simplest and most reliable)
-                try:
-                    iframe = self.wait.until(
-                        EC.presence_of_element_located((By.ID, "signinFrame"))
-                    )
-                    self.driver.switch_to.frame(iframe)
-                    print("[OK] Switched to iframe", file=sys.stderr)
-                except TimeoutException:
-                    # Fallback to any iframe
-                    print("[RETRY] Trying alternative iframe selector...", file=sys.stderr)
-                    try:
-                        iframe = self.driver.find_element(By.TAG_NAME, "iframe")
-                        self.driver.switch_to.frame(iframe)
-                        print("[OK] Switched to iframe (fallback)", file=sys.stderr)
-                    except WebDriverException as e:
-                        print(f"[ERROR] Browser crashed in fallback: {e}", file=sys.stderr)
-                        return False
-                except WebDriverException as e:
-                    # Check if browser crashed
-                    if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
-                        print("[ERROR] Browser window closed/crashed during iframe detection", file=sys.stderr)
-                        return False
-                    raise  # Re-raise other WebDriverExceptions
-                    
-            except WebDriverException as e:
-                # Handle browser crash errors
-                if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
-                    print("[ERROR] Browser crashed or was closed unexpectedly", file=sys.stderr)
-                    return False
-                print(f"[ERROR] WebDriver error: {e}", file=sys.stderr)
-                return False
-            except Exception as e:
-                print(f"[ERROR] Could not find or switch to iframe: {e}", file=sys.stderr)
+                iframe = self.wait.until(
+                    EC.presence_of_element_located((By.ID, "signinFrame"))
+                )
+                self.driver.switch_to.frame(iframe)
+                print("[OK] Switched to iframe", file=sys.stderr)
+            except TimeoutException:
+                print("[ERROR] Could not find login iframe", file=sys.stderr)
                 return False
             
             # Find and fill email field
@@ -333,21 +290,9 @@ class SRMAcademiaScraperSelenium:
                 email_field.clear()
                 email_field.send_keys(email)
                 print(f"[OK] Email entered: {email}", file=sys.stderr)
-            except (TimeoutException, WebDriverException) as e:
-                if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
-                    print("[ERROR] Browser crashed during email entry", file=sys.stderr)
-                    return False
-                print(f"[ERROR] Could not find email field - Exception: {type(e).__name__}: {str(e)}", file=sys.stderr)
-                try:
-                    current_url = self.driver.current_url
-                    current_title = self.driver.title
-                    print(f"[ERROR] Page state when email field failed - URL: {current_url}, Title: {current_title}", file=sys.stderr)
-                except:
-                    pass
-                try:
-                    self.driver.switch_to.default_content()
-                except:
-                    pass
+            except TimeoutException:
+                print("[ERROR] Could not find email field", file=sys.stderr)
+                self.driver.switch_to.default_content()
                 return False
             
             # Click Next button to reveal password field
@@ -356,68 +301,24 @@ class SRMAcademiaScraperSelenium:
                 next_button = self.driver.find_element(By.ID, "nextbtn")
                 next_button.click()
                 print("[OK] Next button clicked", file=sys.stderr)
-            except (NoSuchElementException, WebDriverException) as e:
-                if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
-                    print("[ERROR] Browser crashed during next button click", file=sys.stderr)
-                    return False
-                print(f"[ERROR] Could not find Next button - Exception: {type(e).__name__}: {str(e)}", file=sys.stderr)
-                try:
-                    current_url = self.driver.current_url
-                    current_title = self.driver.title
-                    print(f"[ERROR] Page state when next button failed - URL: {current_url}, Title: {current_title}", file=sys.stderr)
-                except:
-                    pass
-                try:
-                    self.driver.switch_to.default_content()
-                except:
-                    pass
+                time.sleep(2)  # Wait for password field to appear
+            except NoSuchElementException:
+                print("[ERROR] Could not find Next button", file=sys.stderr)
+                self.driver.switch_to.default_content()
                 return False
             
-            # ✅ CRITICAL FIX: Wait AFTER try/except (outside the try block!)
-            # The Microsoft login UI needs time to transition from email to password view
-            print("[STEP 4.5] Waiting for password field to appear...", file=sys.stderr)
-            time.sleep(2)  # Wait for iframe to update and password field to render
-            
-            # ✅ CRITICAL: Re-switch to iframe after Next click (iframe becomes stale)
-            print("[STEP 4.6] Re-switching to iframe after Next click...", file=sys.stderr)
-            try:
-                # Switch back to main content first
-                self.driver.switch_to.default_content()
-                # Wait for iframe to be ready
-                iframe = self.wait.until(
-                    EC.presence_of_element_located((By.ID, "signinFrame"))
-                )
-                # Switch back into iframe
-                self.driver.switch_to.frame(iframe)
-                print("[OK] Re-switched to iframe successfully", file=sys.stderr)
-            except TimeoutException:
-                print("[WARN] Could not re-switch to iframe - continuing anyway", file=sys.stderr)
-            
-            # ✅ OPTIMIZED: Find and fill password field - use OLD METHOD like OLD CODE!
+            # Find and fill password field
             print("[STEP 5] Entering password...", file=sys.stderr)
             try:
-                # Use self.wait instead of creating new WebDriverWait, and use presence_of_element_located like old code
                 password_field = self.wait.until(
                     EC.presence_of_element_located((By.ID, "password"))
                 )
                 password_field.clear()
                 password_field.send_keys(password)
                 print("[OK] Password entered", file=sys.stderr)
-            except (TimeoutException, WebDriverException) as e:
-                if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
-                    print("[ERROR] Browser crashed during password entry", file=sys.stderr)
-                    return False
-                print(f"[ERROR] Could not find password field - Exception: {type(e).__name__}: {str(e)}", file=sys.stderr)
-                try:
-                    current_url = self.driver.current_url
-                    current_title = self.driver.title
-                    print(f"[ERROR] Page state when password field failed - URL: {current_url}, Title: {current_title}", file=sys.stderr)
-                except:
-                    pass
-                try:
-                    self.driver.switch_to.default_content()
-                except:
-                    pass
+            except TimeoutException:
+                print("[ERROR] Could not find password field", file=sys.stderr)
+                self.driver.switch_to.default_content()
                 return False
             
             # Click login button (same as next button)
@@ -428,108 +329,26 @@ class SRMAcademiaScraperSelenium:
                 )
                 login_button.click()
                 print("[OK] Login button clicked", file=sys.stderr)
-            except (TimeoutException, WebDriverException) as e:
-                if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
-                    print("[ERROR] Browser crashed during login button click", file=sys.stderr)
-                    return False
-                print(f"[ERROR] Could not find login button - Exception: {type(e).__name__}: {str(e)}", file=sys.stderr)
-                try:
-                    current_url = self.driver.current_url
-                    current_title = self.driver.title
-                    print(f"[ERROR] Page state when login button failed - URL: {current_url}, Title: {current_title}", file=sys.stderr)
-                except:
-                    pass
-                try:
-                    self.driver.switch_to.default_content()
-                except:
-                    pass
+            except TimeoutException:
+                print("[ERROR] Could not find login button", file=sys.stderr)
+                self.driver.switch_to.default_content()
                 return False
             
-            # ✅ HYBRID METHOD: Wait for login to complete (smart wait - returns as soon as done)
-            print("[STEP 7] Waiting for login to complete (smart wait)...", file=sys.stderr)
+            # Wait for login to complete
+            print("[STEP 7] Waiting for login to complete...", file=sys.stderr)
+            time.sleep(2)  # Reduced from 5s to 2s
             
+            # Switch back to default content
+            self.driver.switch_to.default_content()
+            
+            # Check if login was successful
             try:
-                # STRATEGY 1: Wait for iframe to become stale/closed = login processed
-                # This is faster than fixed sleep and more reliable
+                # Wait for dashboard or any protected page to load (with shorter timeout)
+                WebDriverWait(self.driver, 5).until(
+                    lambda driver: "Dashboard" in driver.title or "academia" in driver.current_url
+                )
                 
-                def login_iframe_disappeared(driver):
-                    """Check if login iframe has disappeared (login processed)"""
-                    try:
-                        driver.switch_to.default_content()  # Switch to main frame
-                        # Try to find iframe - if it's gone, login processed
-                        iframe_elements = driver.find_elements(By.ID, "signinFrame")
-                        if len(iframe_elements) == 0:
-                            return True  # Iframe gone = login completed
-                        return False
-                    except Exception:
-                        # Iframe detached/stale = login processed
-                        return True
-                
-                # Wait up to 10 seconds for login to complete (typically 1-3 seconds)
-                try:
-                    WebDriverWait(self.driver, 10).until(login_iframe_disappeared)
-                    print("[OK] Login iframe disappeared - login processing complete", file=sys.stderr)
-                except TimeoutException:
-                    # Backup: Check if we're still in iframe after timeout
-                    try:
-                        self.driver.switch_to.default_content()
-                        # Give it one more chance - check page state
-                        time.sleep(0.5)
-                    except:
-                        pass
-                    print("[WARN] Iframe check timeout - proceeding with verification", file=sys.stderr)
-                
-                # Ensure we're in default content
-                self.driver.switch_to.default_content()
-                
-                # ✅ STEP 7.1: Quick verification - check page state WITHOUT navigating (saves time)
-                print("[STEP 7.1] Verifying login state (current page check)...", file=sys.stderr)
-                time.sleep(0.5)  # Brief wait for page state to settle
-                
-                current_url = self.driver.current_url
-                current_title = self.driver.title
-                page_source_sample = self.driver.page_source[:1000] if len(self.driver.page_source) > 0 else ""
-                
-                print(f"[LOGIN VERIFY] Current URL: {current_url}", file=sys.stderr)
-                print(f"[LOGIN VERIFY] Current title: {current_title}", file=sys.stderr)
-                print(f"[LOGIN VERIFY] Contains 'Login' in title: {'Login' in current_title}", file=sys.stderr)
-                print(f"[LOGIN VERIFY] Contains 'signinFrame' in source: {'signinFrame' in page_source_sample}", file=sys.stderr)
-                
-                # ✅ CRITICAL: Must NOT be on login page
-                if "Login" in current_title:
-                    print("[ERROR] Login failed - still on login page", file=sys.stderr)
-                    # ✅ FIX: Instead of Dashboard (which doesn't exist), verify by checking if we can access any valid page
-                    # Try accessing a known valid page as fallback verification
-                    print("[RETRY] Attempting to verify login by accessing Attendance page...", file=sys.stderr)
-                    attendance_url = "https://academia.srmist.edu.in/#Page:My_Attendance"
-                    self.driver.get(attendance_url)
-                    time.sleep(2)
-                    final_url = self.driver.current_url
-                    final_title = self.driver.title
-                    final_source_check = self.driver.page_source[:1000] if len(self.driver.page_source) > 0 else ""
-                    
-                    print(f"[LOGIN VERIFY] After Attendance page navigation - URL: {final_url}", file=sys.stderr)
-                    print(f"[LOGIN VERIFY] After Attendance page navigation - Title: {final_title}", file=sys.stderr)
-                    
-                    # Check if we're still on login page or redirected to login
-                    if "Login" in final_title or "signinFrame" in final_source_check:
-                        print("[ERROR] Login failed - redirected to login page when accessing protected page", file=sys.stderr)
-                        print(f"[ERROR] Title: {final_title}, URL: {final_url}", file=sys.stderr)
-                        return False
-                    
-                    # Verify we're actually on a valid portal page
-                    if "#Page:" not in final_url:
-                        print("[ERROR] Login failed - not on a valid portal page", file=sys.stderr)
-                        print(f"[ERROR] Title: {final_title}, URL: {final_url}", file=sys.stderr)
-                        return False
-                    
-                    print("[OK] Login verified - successfully accessed protected page", file=sys.stderr)
-                
-                if "signinFrame" in page_source_sample:
-                    print("[ERROR] Login failed - login frame still present", file=sys.stderr)
-                    return False
-                
-                print(f"[OK] Login verified! Current page: {current_title}", file=sys.stderr)
+                print("[OK] Login successful!", file=sys.stderr)
                 
                 # Save session if enabled
                 if self.use_session:
@@ -537,25 +356,8 @@ class SRMAcademiaScraperSelenium:
                 
                 return True
                 
-            
-            except (TimeoutException, WebDriverException) as e:
-                # Detailed error logging
-                try:
-                    error_url = self.driver.current_url
-                    error_title = self.driver.title
-                    error_source_snippet = self.driver.page_source[:1000] if len(self.driver.page_source) > 0 else ""
-                    print(f"[ERROR] Login timeout/error - Current URL: {error_url}", file=sys.stderr)
-                    print(f"[ERROR] Login timeout/error - Current Title: {error_title}", file=sys.stderr)
-                    print(f"[ERROR] Login timeout/error - Page contains 'signinFrame': {'signinFrame' in error_source_snippet}", file=sys.stderr)
-                    print(f"[ERROR] Login timeout/error - Page contains 'Dashboard': {'Dashboard' in error_source_snippet}", file=sys.stderr)
-                    print(f"[ERROR] Login timeout/error - Page source snippet (first 500 chars): {error_source_snippet[:500]}", file=sys.stderr)
-                except Exception as debug_e:
-                    print(f"[ERROR] Could not get error state: {debug_e}", file=sys.stderr)
-                
-                if "target frame detached" in str(e).lower() or "disconnected" in str(e).lower():
-                    print("[ERROR] Browser crashed while waiting for login completion", file=sys.stderr)
-                    return False
-                print(f"[ERROR] Login failed - timeout/error during verification. Exception: {type(e).__name__}: {str(e)}", file=sys.stderr)
+            except TimeoutException:
+                print("[ERROR] Login failed - timeout waiting for dashboard", file=sys.stderr)
                 return False
                 
         except Exception as e:
