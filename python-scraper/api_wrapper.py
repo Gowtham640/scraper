@@ -615,7 +615,7 @@ def api_get_attendance_data(email, password):
                 print(f"[API] Error closing scraper: {e}", file=sys.stderr)
 
 
-def get_marks_page_html(scraper):
+def get_marks_page_html(scraper, trust_logged_in=False):
     """Get the HTML content of the marks page (which is actually the attendance page)"""
     try:
         print("\n=== NAVIGATING TO MARKS PAGE (ATTENDANCE PAGE) ===", file=sys.stderr)
@@ -627,14 +627,15 @@ def get_marks_page_html(scraper):
         scraper.driver.get(attendance_url)
         time.sleep(0.5)  # Small wait for page to start loading
         
-        # ✅ CRITICAL: Check for login page IMMEDIATELY
-        current_title = scraper.driver.title
-        page_source_check = scraper.driver.page_source[:1000] if len(scraper.driver.page_source) > 0 else ""
-        
-        if "Login" in current_title or "signinFrame" in page_source_check:
-            print(f"[MARKS] ✗ ERROR: Redirected to login page - session expired or login failed", file=sys.stderr)
-            print(f"[MARKS] Title: {current_title}, Contains signinFrame: {'signinFrame' in page_source_check}", file=sys.stderr)
-            return None
+        # ✅ CRITICAL: Check for login page IMMEDIATELY - SKIP if trust_logged_in
+        if not trust_logged_in:
+            current_title = scraper.driver.title
+            page_source_check = scraper.driver.page_source[:1000] if len(scraper.driver.page_source) > 0 else ""
+            
+            if "Login" in current_title or "signinFrame" in page_source_check:
+                print(f"[MARKS] ✗ ERROR: Redirected to login page - session expired or login failed", file=sys.stderr)
+                print(f"[MARKS] Title: {current_title}, Contains signinFrame: {'signinFrame' in page_source_check}", file=sys.stderr)
+                return None
         
         # ✅ SMART WAIT: Wait for attendance table WITH ROWS (returns as soon as ready, max 8s)
         print("[MARKS] Smart wait for attendance table with rows...", file=sys.stderr)
@@ -1214,7 +1215,7 @@ def get_calendar_data_with_scraper(scraper, email, password, force_refresh=False
         # ✅ OPTIMIZED: If we trust login (just logged in), fetch directly - NO CHECKS, NO VERIFICATION
         if trust_logged_in:
             print("[OPTIMIZED] Trusting login state - fetching calendar directly (no checks)", file=sys.stderr)
-            html_content = scraper.get_calendar_data()  # Direct fetch - trust browser is logged in
+            html_content = scraper.get_calendar_data(trust_logged_in=True)  # Direct fetch - trust browser is logged in
         else:
             # Backward compatibility: Check login only if we didn't login at top level
             if scraper.is_logged_in():
@@ -1301,7 +1302,7 @@ def get_attendance_and_marks_data_with_scraper(scraper, email, password, trust_l
         if trust_logged_in:
             print("[OPTIMIZED] Trusting login state - fetching attendance/marks directly (no checks)", file=sys.stderr)
             # Direct fetch - trust browser is logged in
-            html_content = get_marks_page_html(scraper)
+            html_content = get_marks_page_html(scraper, trust_logged_in=True)
         else:
             # Backward compatibility: Check login only if we didn't login at top level
             if scraper.is_logged_in():
@@ -1476,7 +1477,7 @@ def get_timetable_data_with_scraper(scraper, email, password, trust_logged_in=Fa
         # ✅ OPTIMIZED: If we trust login (just logged in), fetch directly - NO CHECKS, NO VERIFICATION
         if trust_logged_in:
             print("[OPTIMIZED] Trusting login state - fetching timetable directly (no checks)", file=sys.stderr)
-            html_content = get_timetable_page_html(scraper)  # Direct fetch - trust browser is logged in
+            html_content = get_timetable_page_html(scraper, trust_logged_in=True)  # Direct fetch - trust browser is logged in
         else:
             # Backward compatibility: Check login only if we didn't login at top level
             if scraper.is_logged_in():

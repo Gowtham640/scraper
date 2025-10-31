@@ -12,7 +12,7 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 from scraper_selenium_session import SRMAcademiaScraperSelenium
 
-def get_timetable_page_html(scraper):
+def get_timetable_page_html(scraper, trust_logged_in=False):
     """Get the HTML content of the timetable page"""
     try:
         print("\n=== NAVIGATING TO TIMETABLE PAGE ===", file=sys.stderr)
@@ -23,22 +23,25 @@ def get_timetable_page_html(scraper):
         
         scraper.driver.get(timetable_url)
         
-        # ✅ PHASE 2 FIX: Check for login page immediately after navigation (saves ~20s)
-        print("[STEP 2] Checking for login page (early exit optimization)...", file=sys.stderr)
-        time.sleep(0.5)  # Small wait for page to start loading
-        
-        # Early exit if we're on login page
-        current_title = scraper.driver.title
-        current_url = scraper.driver.current_url
-        page_source_snippet = scraper.driver.page_source[:500]  # Small sample for quick check
-        
-        if "Login" in current_title or "signinFrame" in page_source_snippet:
-            print("[ERROR] Redirected to login page - session expired", file=sys.stderr)
-            print(f"[ERROR] Current title: {current_title}", file=sys.stderr)
-            print(f"[ERROR] Current URL: {current_url}", file=sys.stderr)
-            return None  # Exit early - don't waste 20+ seconds waiting for tables
-        
-        print("[OK] Not on login page, proceeding with timetable extraction", file=sys.stderr)
+        # ✅ PHASE 2 FIX: Check for login page immediately after navigation (saves ~20s) - SKIP if trust_logged_in
+        if not trust_logged_in:
+            print("[STEP 2] Checking for login page (early exit optimization)...", file=sys.stderr)
+            time.sleep(0.5)  # Small wait for page to start loading
+            
+            # Early exit if we're on login page
+            current_title = scraper.driver.title
+            current_url = scraper.driver.current_url
+            page_source_snippet = scraper.driver.page_source[:500]  # Small sample for quick check
+            
+            if "Login" in current_title or "signinFrame" in page_source_snippet:
+                print("[ERROR] Redirected to login page - session expired", file=sys.stderr)
+                print(f"[ERROR] Current title: {current_title}", file=sys.stderr)
+                print(f"[ERROR] Current URL: {current_url}", file=sys.stderr)
+                return None  # Exit early - don't waste 20+ seconds waiting for tables
+            
+            print("[OK] Not on login page, proceeding with timetable extraction", file=sys.stderr)
+        else:
+            print("[OK] Trusting login state - skipping login check", file=sys.stderr)
         
         # ✅ CRITICAL: Wait for timetable table WITH ROWS (not just table presence)
         print("[STEP 3] Waiting for timetable table with rows to load...", file=sys.stderr)

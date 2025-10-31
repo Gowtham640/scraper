@@ -358,7 +358,7 @@ class SRMAcademiaScraperSelenium:
             traceback.print_exc()
             return False
     
-    def get_calendar_data(self):
+    def get_calendar_data(self, trust_logged_in=False):
         """Get calendar data from the academic planner page"""
         try:
             print("\n=== GETTING CALENDAR DATA ===", file=sys.stderr)
@@ -369,21 +369,24 @@ class SRMAcademiaScraperSelenium:
             
             self.driver.get(planner_url)
             
-            # ✅ CRITICAL: Early login page detection (before waiting for content)
-            print("[STEP 2] Checking for login page (early exit optimization)...", file=sys.stderr)
-            time.sleep(0.5)  # Small wait for page to start loading
-            
-            current_title = self.driver.title
-            current_url = self.driver.current_url
-            page_source_snippet = self.driver.page_source[:500]  # Small sample for quick check
-            
-            if "Login" in current_title or "signinFrame" in page_source_snippet:
-                print("[ERROR] Redirected to login page - session expired", file=sys.stderr)
-                print(f"[ERROR] Current title: {current_title}", file=sys.stderr)
-                print(f"[ERROR] Current URL: {current_url}", file=sys.stderr)
-                return None
-            
-            print("[OK] Not on login page, proceeding with calendar extraction", file=sys.stderr)
+            # ✅ CRITICAL: Early login page detection (before waiting for content) - SKIP if trust_logged_in
+            if not trust_logged_in:
+                print("[STEP 2] Checking for login page (early exit optimization)...", file=sys.stderr)
+                time.sleep(0.5)  # Small wait for page to start loading
+                
+                current_title = self.driver.title
+                current_url = self.driver.current_url
+                page_source_snippet = self.driver.page_source[:500]  # Small sample for quick check
+                
+                if "Login" in current_title or "signinFrame" in page_source_snippet:
+                    print("[ERROR] Redirected to login page - session expired", file=sys.stderr)
+                    print(f"[ERROR] Current title: {current_title}", file=sys.stderr)
+                    print(f"[ERROR] Current URL: {current_url}", file=sys.stderr)
+                    return None
+                
+                print("[OK] Not on login page, proceeding with calendar extraction", file=sys.stderr)
+            else:
+                print("[OK] Trusting login state - skipping login check", file=sys.stderr)
             
             # ✅ CRITICAL: Wait for calendar table WITH ROWS (not just table presence)
             print("[STEP 3] Waiting for calendar table with rows to load...", file=sys.stderr)
