@@ -340,9 +340,9 @@ class SRMAcademiaScraperSelenium:
 
             # Check if login was successful
             try:
-                # Wait for login page to disappear and be on protected academia page
+                # Wait for login page to disappear and be on protected academia page with #Page: or WELCOME
                 WebDriverWait(self.driver, 10).until(
-                    lambda driver: "Login" not in driver.title and "academia" in driver.current_url
+                    lambda driver: ("Login" not in driver.title and "#Page:" in driver.current_url) or "WELCOME" in driver.title
                 )
                 print("[OK] Login successful!", file=sys.stderr)
                 # Save session if enabled
